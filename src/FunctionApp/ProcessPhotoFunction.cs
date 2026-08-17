@@ -1,0 +1,152 @@
+using System.Text.Json;
+using FrsAiDemo.FunctionApp.Models;
+using FrsAiDemo.FunctionApp.Services;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
+
+namespace FrsAiDemo.FunctionApp;
+
+/// <summary>
+/// Event Hub-triggered function: reads a photo-uploaded event, fetches the blob, detects faces
+/// via Azure AI Face API, and either records a repeat sighting or registers a brand-new person.
+/// </summary>
+public sealed class ProcessPhotoFunction
+{
+    private static readonly TimeSpan TrainingTimeout = TimeSpan.FromSeconds(30);
+
+    private readonly IBlobStorageService _blobStorageService;
+    private readonly IFaceApiService _faceApiService;
+    private readonly ICosmosFaceRepository _faceRepository;
+    private readonly ILogger<ProcessPhotoFunction> _logger;
+
+    public ProcessPhotoFunction(
+        IBlobStorageService blobStorageService,
+        IFaceApiService faceApiService,
+        ICosmosFaceRepository faceRepository,
+        ILogger<ProcessPhotoFunction> logger)
+    {
+        _blobStorageService = blobStorageService;
+        _faceApiService = faceApiService;
+        _faceRepository = faceRepository;
+        _logger = logger;
+    }
+
+    [Function("ProcessPhotoFunction")]
+    public async Task RunAsync(
+        [EventHubTrigger("photo-events", Connection = "EventHub", ConsumerGroup = "%EventHubConsumerGroup%", IsBatched = false)] string message,
+        FunctionContext executionContext)
+    {
+        var logger = executionContext.GetLogger<ProcessPhotoFunction>();
+        var cancellationToken = executionContext.CancellationToken;
+
+        PhotoUploadedEvent? uploadEvent;
+        try
+        {
+            uploadEvent = JsonSerializer.Deserialize<PhotoUploadedEvent>(message);
+        }
+        catch (JsonException ex)
+        {
+            // Poison message: log and drop rather than retrying forever.
+            logger.LogError(ex, "Failed to deserialize photo-uploaded event, dropping message: {Message}", message);
+            return;
+        }
+
+        if (uploadEvent is null)
+        {
+            logger.LogError("Deserialized photo-uploaded event was null, dropping message: {Message}", message);
+            return;
+        }
+
+        logger.LogInformation("Processing photo {BlobName} from upload {UploadId}", uploadEvent.BlobName, uploadEvent.UploadId);
+
+        try
+        {
+            await ProcessUploadEventAsync(uploadEvent, logger, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Unexpected failures (Face API/Cosmos/Storage errors) are logged and the raw event
+            // is dead-lettered to a "poison-messages" blob container for manual investigation,
+            // rather than retried indefinitely (Event Hub triggers have no built-in poison queue).
+            logger.LogError(ex, "Failed to process photo-uploaded event for upload {UploadId}, dead-lettering message", uploadEvent.UploadId);
+            await _blobStorageService.UploadPoisonMessageAsync(
+                $"{uploadEvent.UploadId}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.json",
+                JsonSerializer.Serialize(new { uploadEvent, error = ex.ToString() }),
+                CancellationToken.None);
+        }
+    }
+
+    private async Task ProcessUploadEventAsync(PhotoUploadedEvent uploadEvent, ILogger logger, CancellationToken cancellationToken)
+    {
+        await _faceApiService.EnsurePersonGroupExistsAsync(cancellationToken);
+
+        // Buffer the photo so it can be re-read for both Detect and (potentially) AddPersonFace.
+        await using var photoStream = await _blobStorageService.DownloadPhotoAsync(uploadEvent.ContainerName, uploadEvent.BlobName, cancellationToken);
+        using var buffered = new MemoryStream();
+        await photoStream.CopyToAsync(buffered, cancellationToken);
+
+        buffered.Position = 0;
+        var detectedFaces = await _faceApiService.DetectFacesAsync(buffered, cancellationToken);
+
+        if (detectedFaces.Count == 0)
+        {
+            logger.LogInformation("No faces detected in photo {BlobName}", uploadEvent.BlobName);
+            return;
+        }
+
+        var faceIds = detectedFaces.Where(f => f.FaceId is not null).Select(f => f.FaceId!).ToList();
+        var identifyResults = await _faceApiService.IdentifyAsync(faceIds, cancellationToken);
+        var identifiedByFaceId = identifyResults.ToDictionary(r => r.FaceId ?? string.Empty, r => r);
+
+        foreach (var face in detectedFaces)
+        {
+            if (face.FaceId is null)
+            {
+                continue;
+            }
+
+            var matchedPersonId = identifiedByFaceId.TryGetValue(face.FaceId, out var identifyResult)
+                ? identifyResult.Candidates.OrderByDescending(c => c.Confidence).FirstOrDefault()
+                : null;
+
+            var sighting = new RecognitionEvent
+            {
+                BlobUrl = uploadEvent.BlobUrl,
+                Confidence = matchedPersonId?.Confidence ?? 0,
+                FaceId = face.FaceId,
+                TimestampUtc = uploadEvent.TimestampUtc
+            };
+
+            if (matchedPersonId?.PersonId is not null)
+            {
+                logger.LogInformation("Recognized existing person {PersonId} in photo {BlobName}", matchedPersonId.PersonId, uploadEvent.BlobName);
+                await _faceRepository.RecordRecognitionAsync(matchedPersonId.PersonId, sighting, cancellationToken);
+            }
+            else
+            {
+                await RegisterNewPersonAsync(uploadEvent, sighting, buffered, cancellationToken);
+            }
+        }
+    }
+
+    private async Task RegisterNewPersonAsync(PhotoUploadedEvent uploadEvent, RecognitionEvent sighting, MemoryStream photoStream, CancellationToken cancellationToken)
+    {
+        var personId = await _faceApiService.CreatePersonAsync($"person-{Guid.NewGuid():N}", cancellationToken);
+
+        photoStream.Position = 0;
+        await _faceApiService.AddPersonFaceAsync(personId, photoStream, cancellationToken);
+
+        await _faceApiService.TrainPersonGroupAsync(cancellationToken);
+        var trained = await _faceApiService.WaitForTrainingCompletedAsync(TrainingTimeout, cancellationToken);
+        if (!trained)
+        {
+            _logger.LogWarning(
+                "PersonGroup training did not complete within {Timeout}; person {PersonId} may not be identifiable until the next training cycle.",
+                TrainingTimeout,
+                personId);
+        }
+
+        await _faceRepository.CreateFaceRecordAsync(personId, _faceApiService.PersonGroupId, sighting, cancellationToken);
+        _logger.LogInformation("Registered new person {PersonId} from photo {BlobName}", personId, uploadEvent.BlobName);
+    }
+}

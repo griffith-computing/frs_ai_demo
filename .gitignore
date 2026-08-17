@@ -1,0 +1,18 @@
+## .NET
+bin/
+obj/
+
+## Azure Functions local settings (contains connection info - never commit)
+local.settings.json
+
+## Bicep / ARM build output
+*.json.bak
+
+## IDE
+.vs/
+.vscode/
+*.user
+
+## OS
+.DS_Store
+Thumbs.db
