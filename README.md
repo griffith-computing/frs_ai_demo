@@ -158,11 +158,41 @@ az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --na
      --data-binary "@C:\path\to\photo.jpg"
    ```
 
+## Local upload harness
+
+`src/Tools/PhotoUploadHarness` is a standalone .NET 8 console app for
+bulk-testing the pipeline from a desktop without `curl`. It posts every
+`.jpg`/`.jpeg`/`.png` file in a folder to `UploadPhotoFunction`, either once
+(`batch`) or on a repeating interval (`continuous`, simulating a live camera
+feed), and can optionally poll Cosmos DB to confirm each photo was
+recognized end-to-end.
+
+```powershell
+cd src/Tools/PhotoUploadHarness
+Copy-Item appsettings.json.example appsettings.json
+# edit appsettings.json: set FolderPath (and BaseUrl/FunctionKey if targeting a deployed Function App)
+dotnet run
+```
+
+Key options (in `appsettings.json`, or overridden via `--Key=Value` args):
+
+| Option | Purpose |
+|---|---|
+| `BaseUrl` | Upload endpoint; defaults to local `func start` (`http://localhost:7071/api/photos`). No function key is needed locally — only against a deployed Function App. |
+| `FolderPath` | Folder of images to upload. |
+| `Mode` | `batch` (upload each file once) or `continuous` (loop with `IntervalSeconds` delay, Ctrl+C to stop). |
+| `MaxIterations` | Continuous mode only; `0` loops until cancelled. |
+| `EnableVerification` | If `true`, polls the `Faces` Cosmos container (`DefaultAzureCredential`) for each upload's recognition result, up to `VerificationTimeoutSeconds`. Requires deployed Cosmos DB access. |
+
 ## Building / validating
 
 ```powershell
 # .NET Function App
 cd src/FunctionApp
+dotnet build
+
+# Photo upload harness
+cd src/Tools/PhotoUploadHarness
 dotnet build
 
 # Bicep templates

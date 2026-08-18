@@ -16,7 +16,7 @@ param cosmosAccountName string
 // Built-in role definition IDs
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var eventHubDataOwnerRoleId = 'f526a384-b230-433a-b45c-95f59c4a2dec'
-var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-6d67076deba1'
+var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 // Cosmos DB's built-in "Cosmos DB Built-in Data Contributor" SQL role definition ID (fixed GUID suffix on every account)
 var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002'
 

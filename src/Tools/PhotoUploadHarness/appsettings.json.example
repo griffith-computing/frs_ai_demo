@@ -1,0 +1,16 @@
+{
+  "BaseUrl": "http://localhost:7071/api/photos",
+  "FunctionKey": "",
+  "FolderPath": "C:\\path\\to\\photos",
+  "Mode": "batch",
+  "IntervalSeconds": 5,
+  "MaxIterations": 0,
+  "EnableVerification": false,
+  "VerificationTimeoutSeconds": 60,
+  "VerificationPollIntervalSeconds": 3,
+  "Cosmos": {
+    "Endpoint": "https://frsaidemo-cosmos-xxx.documents.azure.com:443/",
+    "DatabaseName": "FacialRecognitionDb",
+    "FacesContainerName": "Faces"
+  }
+}
