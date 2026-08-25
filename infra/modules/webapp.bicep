@@ -112,7 +112,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'PhotosContainerName', value: 'photos' }
         { name: 'EventHub__FullyQualifiedNamespace', value: eventHubFullyQualifiedNamespace }
         { name: 'EventHub__Name', value: eventHubName }
-        { name: 'Uploads__MaxBytes', value: '10485760' }
+        { name: 'Uploads__MaxBytes', value: '6291456' }
       ]
     }
   }

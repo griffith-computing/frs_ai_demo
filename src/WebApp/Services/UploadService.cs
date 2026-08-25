@@ -36,7 +36,7 @@ public sealed class UploadService : IUploadService
         _eventHubProducerClient = eventHubProducerClient;
         _repository = repository;
         _containerName = configuration["PhotosContainerName"] ?? "photos";
-        _maxBytes = configuration.GetValue<long?>("Uploads:MaxBytes") ?? 10 * 1024 * 1024;
+        _maxBytes = configuration.GetValue<long?>("Uploads:MaxBytes") ?? 6 * 1024 * 1024;
     }
 
     public async Task<UploadAccepted> UploadAsync(IFormFile photo, CancellationToken cancellationToken)

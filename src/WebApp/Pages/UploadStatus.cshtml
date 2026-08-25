@@ -9,7 +9,9 @@
     <h1>Analysis <span id="status">@Model.Upload.Status</span></h1>
     <p class="mono">@Model.Upload.Id</p>
     <div class="progress-track" aria-hidden="true"><span></span></div>
-    <p id="status-detail">@(Model.Upload.FailureSummary ?? "The processing service will update this page automatically.")</p>
+    <p id="status-detail">@(Model.Upload.Status == "NoFaces"
+        ? "No face data observed"
+        : Model.Upload.FailureSummary ?? "The processing service will update this page automatically.")</p>
     <div class="status-actions">
         <a class="button secondary" asp-page="/Upload">Upload another</a>
         <a class="button" asp-page="/Index">Browse results</a>
@@ -27,8 +29,10 @@ async function refreshStatus() {
     const state = await response.json();
     panel.dataset.status = state.status;
     document.getElementById('status').textContent = state.status;
-    document.getElementById('status-detail').textContent = state.failureSummary ||
-        (state.detectedFaceCount == null ? 'Analysis is in progress.' : `${state.detectedFaceCount} face(s) detected.`);
+    document.getElementById('status-detail').textContent = state.status === 'NoFaces'
+        ? 'No face data observed'
+        : state.failureSummary ||
+            (state.detectedFaceCount == null ? 'Analysis is in progress.' : `${state.detectedFaceCount} face(s) detected.`);
     if (!terminal.has(state.status)) window.setTimeout(refreshStatus, 2000);
 }
 window.setTimeout(refreshStatus, 2000);

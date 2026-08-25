@@ -2,12 +2,17 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using Azure.Core;
+using Azure.Messaging.EventHubs.Producer;
+using Azure.Storage.Blobs;
 using FrsAiDemo.WebApp.Models;
 using FrsAiDemo.WebApp.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -57,6 +62,77 @@ public sealed class AuthenticationTests : IClassFixture<ReviewerWebApplicationFa
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Test", "Reviewer");
         var response = await client.GetAsync("/");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadStatus_NoFaces_DisplaysRequiredMessage()
+    {
+        using var noFacesFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IFaceReviewRepository>();
+                services.AddSingleton<IFaceReviewRepository>(
+                    new EmptyFaceReviewRepository(new UploadRecord
+                    {
+                        Id = "upload-1",
+                        Status = "NoFaces",
+                        ContainerName = "photos",
+                        BlobName = "upload-1.jpg",
+                        BlobUrl = "https://storage.test/photos/upload-1.jpg",
+                        ContentType = "image/jpeg",
+                        CreatedUtc = DateTimeOffset.UtcNow,
+                        UpdatedUtc = DateTimeOffset.UtcNow,
+                        DetectedFaceCount = 0
+                    }));
+            });
+        });
+        using var client = noFacesFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Test", "Reviewer");
+
+        var body = await client.GetStringAsync("/UploadStatus/upload-1");
+
+        Assert.Contains("No face data observed", body);
+    }
+
+    [Fact]
+    public async Task UploadService_RejectsImagesOverFaceApiLimit()
+    {
+        var credential = new StaticTokenCredential();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Uploads:MaxBytes"] = "6291456"
+            })
+            .Build();
+        await using var eventHub = new EventHubProducerClient("test.servicebus.windows.net", "photo-events", credential);
+        var service = new UploadService(
+            new BlobServiceClient(new Uri("https://storage.test"), credential),
+            eventHub,
+            new EmptyFaceReviewRepository(),
+            configuration);
+        var content = new byte[6291457];
+        var photo = new FormFile(new MemoryStream(content), 0, content.Length, "Photo", "large.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg"
+        };
+
+        var exception = await Assert.ThrowsAsync<System.ComponentModel.DataAnnotations.ValidationException>(
+            () => service.UploadAsync(photo, CancellationToken.None));
+
+        Assert.Contains("6 MB", exception.Message);
+    }
+
+    private sealed class StaticTokenCredential : TokenCredential
+    {
+        private static readonly AccessToken Token = new("test-token", DateTimeOffset.MaxValue);
+
+        public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) => Token;
+
+        public override ValueTask<AccessToken> GetTokenAsync(
+            TokenRequestContext requestContext,
+            CancellationToken cancellationToken) => ValueTask.FromResult(Token);
     }
 }
 
@@ -112,11 +188,19 @@ public sealed class TestAuthenticationHandler(
 
 public sealed class EmptyFaceReviewRepository : IFaceReviewRepository
 {
+    private readonly UploadRecord? _upload;
+
+    public EmptyFaceReviewRepository(UploadRecord? upload = null)
+    {
+        _upload = upload;
+    }
+
     public Task<PageResult<FaceRecord>> GetPeopleAsync(int pageSize, string? continuationToken, CancellationToken cancellationToken) =>
         Task.FromResult(new PageResult<FaceRecord>([], null));
 
     public Task<FaceRecord?> GetPersonAsync(string personId, CancellationToken cancellationToken) => Task.FromResult<FaceRecord?>(null);
-    public Task<UploadRecord?> GetUploadAsync(string uploadId, CancellationToken cancellationToken) => Task.FromResult<UploadRecord?>(null);
+    public Task<UploadRecord?> GetUploadAsync(string uploadId, CancellationToken cancellationToken) =>
+        Task.FromResult(_upload?.Id == uploadId ? _upload : null);
     public Task CreateUploadAsync(UploadRecord upload, CancellationToken cancellationToken) => Task.CompletedTask;
     public Task SetUploadStatusAsync(string uploadId, string status, string? failureSummary, CancellationToken cancellationToken) => Task.CompletedTask;
     public Task<ReviewRecord?> GetReviewAsync(string personId, string sightingKey, string reviewerObjectId, CancellationToken cancellationToken) => Task.FromResult<ReviewRecord?>(null);

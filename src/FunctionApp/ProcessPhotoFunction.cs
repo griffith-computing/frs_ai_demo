@@ -12,8 +12,6 @@ namespace FrsAiDemo.FunctionApp;
 /// </summary>
 public sealed class ProcessPhotoFunction
 {
-    private static readonly TimeSpan TrainingTimeout = TimeSpan.FromSeconds(30);
-
     private readonly IBlobStorageService _blobStorageService;
     private readonly IFaceApiService _faceApiService;
     private readonly ICosmosFaceRepository _faceRepository;
@@ -70,7 +68,7 @@ public sealed class ProcessPhotoFunction
                 detectedFaceCount: null,
                 failureSummary: null,
                 cancellationToken);
-            await ProcessUploadEventAsync(uploadEvent, logger, cancellationToken);
+            await ProcessUploadEventAsync(uploadEvent, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -99,21 +97,22 @@ public sealed class ProcessPhotoFunction
         }
     }
 
-    private async Task ProcessUploadEventAsync(PhotoUploadedEvent uploadEvent, ILogger logger, CancellationToken cancellationToken)
+    internal async Task ProcessUploadEventAsync(PhotoUploadedEvent uploadEvent, CancellationToken cancellationToken)
     {
-        await _faceApiService.EnsurePersonGroupExistsAsync(cancellationToken);
+        await _faceApiService.EnsureDynamicPersonGroupExistsAsync(cancellationToken);
 
-        // Buffer the photo so it can be re-read for both Detect and (potentially) AddPersonFace.
+        // StreamContent owns and disposes its input, so each Face API request needs a fresh stream.
         await using var photoStream = await _blobStorageService.DownloadPhotoAsync(uploadEvent.ContainerName, uploadEvent.BlobName, cancellationToken);
         using var buffered = new MemoryStream();
         await photoStream.CopyToAsync(buffered, cancellationToken);
+        var photoBytes = buffered.ToArray();
 
-        buffered.Position = 0;
-        var detectedFaces = await _faceApiService.DetectFacesAsync(buffered, cancellationToken);
+        using var detectionStream = new MemoryStream(photoBytes, writable: false);
+        var detectedFaces = await _faceApiService.DetectFacesAsync(detectionStream, cancellationToken);
 
         if (detectedFaces.Count == 0)
         {
-            logger.LogInformation("No faces detected in photo {BlobName}", uploadEvent.BlobName);
+            _logger.LogInformation("No faces detected in photo {BlobName}", uploadEvent.BlobName);
             await _uploadRepository.SetStatusAsync(
                 uploadEvent.UploadId,
                 UploadStatuses.NoFaces,
@@ -148,12 +147,12 @@ public sealed class ProcessPhotoFunction
 
             if (matchedPersonId?.PersonId is not null)
             {
-                logger.LogInformation("Recognized existing person {PersonId} in photo {BlobName}", matchedPersonId.PersonId, uploadEvent.BlobName);
+                _logger.LogInformation("Recognized existing person {PersonId} in photo {BlobName}", matchedPersonId.PersonId, uploadEvent.BlobName);
                 await _faceRepository.RecordRecognitionAsync(matchedPersonId.PersonId, sighting, cancellationToken);
             }
             else
             {
-                await RegisterNewPersonAsync(uploadEvent, sighting, buffered, cancellationToken);
+                await RegisterNewPersonAsync(uploadEvent, sighting, face.FaceRectangle, photoBytes, cancellationToken);
             }
         }
 
@@ -165,24 +164,29 @@ public sealed class ProcessPhotoFunction
             cancellationToken);
     }
 
-    private async Task RegisterNewPersonAsync(PhotoUploadedEvent uploadEvent, RecognitionEvent sighting, MemoryStream photoStream, CancellationToken cancellationToken)
+    private async Task RegisterNewPersonAsync(
+        PhotoUploadedEvent uploadEvent,
+        RecognitionEvent sighting,
+        FaceRectangle? faceRectangle,
+        byte[] photoBytes,
+        CancellationToken cancellationToken)
     {
-        var personId = await _faceApiService.CreatePersonAsync($"person-{Guid.NewGuid():N}", cancellationToken);
-
-        photoStream.Position = 0;
-        await _faceApiService.AddPersonFaceAsync(personId, photoStream, cancellationToken);
-
-        await _faceApiService.TrainPersonGroupAsync(cancellationToken);
-        var trained = await _faceApiService.WaitForTrainingCompletedAsync(TrainingTimeout, cancellationToken);
-        if (!trained)
+        if (faceRectangle is null)
         {
-            _logger.LogWarning(
-                "PersonGroup training did not complete within {Timeout}; person {PersonId} may not be identifiable until the next training cycle.",
-                TrainingTimeout,
-                personId);
+            throw new InvalidOperationException($"Face API did not return a rectangle for face {sighting.FaceId}.");
         }
 
-        await _faceRepository.CreateFaceRecordAsync(personId, _faceApiService.PersonGroupId, sighting, cancellationToken);
+        var personId = await _faceApiService.CreatePersonAsync($"person-{Guid.NewGuid():N}", cancellationToken);
+
+        using var enrollmentStream = new MemoryStream(photoBytes, writable: false);
+        await _faceApiService.AddPersonFaceAsync(personId, enrollmentStream, faceRectangle, cancellationToken);
+        await _faceApiService.AddPersonToDynamicGroupAsync(personId, cancellationToken);
+
+        await _faceRepository.CreateFaceRecordAsync(
+            personId,
+            _faceApiService.DynamicPersonGroupId,
+            sighting,
+            cancellationToken);
         _logger.LogInformation("Registered new person {PersonId} from photo {BlobName}", personId, uploadEvent.BlobName);
     }
 }

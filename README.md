@@ -31,9 +31,9 @@ updated.
                  │ ProcessPhotoFunction │  (Event Hub trigger)
                  │  1. fetch blob       │
                  │  2. Face API Detect  │───▶ Azure AI Face API
-                 │  3. Face API Identify│      (PersonGroup: frs-ai-demo-group)
+                 │  3. Face API Identify│      (Dynamic group: frs-ai-demo-group)
                  │  4. new? create      │
-                 │     Person + train   │
+                 │     Person + enroll  │
                  │  5. write/update     │───▶ Cosmos DB (Faces container)
                  │     Cosmos record    │
                  └──────────────────────┘
@@ -46,15 +46,16 @@ designed for large binary payloads. Instead, the photo is uploaded to Blob
 Storage first, and Event Hub only carries a small JSON event with the blob
 URL — a standard, scalable pattern for this kind of pipeline.
 
-**Why Face API PersonGroup/Identify instead of custom vector similarity?**
+**Why Face API Person Directory/Identify instead of custom vector similarity?**
 Azure AI Face API does not expose raw face-embedding vectors through its
 public API (a responsible-AI restriction), so a genuinely "custom" vector
 similarity search against Cosmos DB isn't possible with this service. The
-Face API's own **PersonGroup** + **Identify** operations do this matching
-for you server-side — you manage a group of known people, and Identify
-returns candidate `personId` matches with confidence scores. This solution
-still uses Cosmos DB to store rich metadata per person (first/last seen,
-full recognition history).
+Face API's own **Person Directory**, **Dynamic Person Group**, and **Identify**
+operations do this matching for you server-side. Identify returns candidate
+`personId` matches with confidence scores, and Person Directory processes new
+enrollments automatically without a Train call. This solution still uses
+Cosmos DB to store rich metadata per person (first/last seen and full
+recognition history).
 
 ## Networking
 
@@ -109,7 +110,7 @@ to it.
 | **Blob Storage** (`photos` container) | Stores uploaded photo files. |
 | **Event Hub** (`photo-events`) | Carries lightweight upload events (blob URL + metadata) from the upload function to the processing function. |
 | **Function App** (.NET 10 isolated) | `UploadPhotoFunction` (HTTP trigger) + `ProcessPhotoFunction` (Event Hub trigger). |
-| **Azure AI Face API** | Face detection (`Detect`) and recognition (`Identify` against a `PersonGroup`); new faces are registered as new `Person` entries and the group is retrained. |
+| **Azure AI Face API** | Face detection (`Detect`) and recognition (`Identify` against a Dynamic Person Group); new faces are enrolled in Person Directory without training. |
 | **Cosmos DB** (NoSQL API, `Faces` container, partition key `/personId`) | One document per recognized person: `firstSeenUtc`, `lastSeenUtc`, and a `recognitionHistory` array of every sighting (timestamp, blob URL, confidence). |
 | **Managed Identity** | Single user-assigned identity used by the Function App to authenticate to Storage, Event Hub, Cosmos DB, and the Face API — no connection strings or keys stored in app settings. |
 | **Reviewer Web App** (.NET 10 Razor Pages) | Entra-authenticated review UI for browsing sightings, privately streaming photos, uploading new photos, tracking processing, and recording reviewer decisions. |
@@ -138,7 +139,7 @@ to it.
   ProcessPhotoFunction.cs      # Event Hub trigger: detect/identify/log
   Services/
     BlobStorageService.cs
-    FaceApiService.cs          # Face API REST wrapper (Detect/Identify/PersonGroup/Train)
+    FaceApiService.cs          # Face API REST wrapper (Detect/Person Directory/Identify)
     CosmosFaceRepository.cs
   Models/
     PhotoUploadedEvent.cs
@@ -169,7 +170,7 @@ secure value at deploy time (or via `entraClientSecret` in Key Vault reference).
 |---|---|---|---|
 | `namePrefix` | No | `frsaidemo` | Prefix used to derive all resource names (3–12 lowercase alphanumeric chars). |
 | `location` | No | resource group location | Azure region for all resources. |
-| `personGroupId` | No | `frs-ai-demo-group` | Face API PersonGroup id used for identify/training. |
+| `dynamicPersonGroupId` | No | `frs-ai-demo-group` | Face API Dynamic Person Group id used for no-training identification. |
 | `entraTenantId` | No | deployment tenant | Microsoft Entra tenant ID for reviewer sign-in. |
 | `entraClientId` | **Yes** | — | Client ID of the reviewer web app's Entra registration. |
 | `entraClientSecret` | **Yes** (`@secure`) | — | Client secret of the Entra registration. Supply at deploy time; never commit it. |
@@ -211,7 +212,7 @@ After deployment, note the outputs (`functionAppName`, `storageAccountName`,
 settings/function key to call the upload endpoint, and `webAppHostName` to add
 `https://<webAppHostName>/signin-oidc` as a redirect URI on the Entra app
 registration. The Face API resource must have **Limited Access** approval from
-Microsoft before the `Identify`/`PersonGroup` operations will work in a
+Microsoft before the `Identify`/Person Directory operations will work in a
 production subscription.
 
 ## Deploying the Function App code
@@ -331,10 +332,10 @@ The web app supports:
   Storage;
 - photo-level `Correct`, `Incorrect`, or `Unsure` decisions with optional
   reviewer notes;
-- JPEG/PNG uploads directly to Blob Storage and Event Hub using managed
-  identity; and
+- JPEG/PNG uploads up to 6 MB directly to Blob Storage and Event Hub using
+  managed identity; and
 - durable upload states: `Queued`, `Processing`, `Completed`, `NoFaces`, or
-  `Failed`.
+  `Failed`, including the explicit `No face data observed` no-face result.
 
 ### Microsoft Entra setup
 
@@ -470,11 +471,14 @@ az bicep build --file infra/main.bicep --stdout
 
 ## Known limitations / follow-ups
 
-- **PersonGroup training is asynchronous.** After registering a brand-new
-  person, `ProcessPhotoFunction` triggers training and polls for completion
-  (up to 30s) before returning. If training doesn't finish in time, that
-  person may not be identifiable until the next training cycle — this is
-  logged as a warning rather than treated as a hard failure.
+- **Person Directory is a preview API.** The pipeline uses Face API
+  `v1.2-preview.1` and a Dynamic Person Group so enrollment is processed
+  automatically without Train calls. It polls each asynchronous person/face
+  enrollment before completing the upload.
+- **Legacy recognition records are review-only.** Cosmos records produced by
+  the previous trained PersonGroup flow remain visible, but new duplicate
+  matching starts with identities enrolled in Person Directory after this
+  deployment.
 - **Upload endpoint auth** defaults to Azure Functions key-based auth
   (`AuthorizationLevel.Function`). Add Azure AD/APIM in front of it for
   production-grade user authentication.
@@ -486,6 +490,6 @@ az bicep build --file infra/main.bicep --stdout
   `poison-messages` blob container (with the original event + exception
   details) rather than retried indefinitely, since Event Hub triggers have
   no built-in poison-message queue.
-- **Face API regional/access availability**: Face API `Identify`/
-  `PersonGroup` features require Microsoft's Limited Access approval in some
+- **Face API regional/access availability**: Face API `Identify` and Person
+  Directory features require Microsoft's Limited Access approval in some
   subscriptions/regions — apply before relying on this in production.

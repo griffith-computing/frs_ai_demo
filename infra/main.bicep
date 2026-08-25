@@ -6,8 +6,8 @@ param namePrefix string = 'frsaidemo'
 @description('Azure region for all resources.')
 param location string = resourceGroup().location
 
-@description('Face API PersonGroup id used for identify/training.')
-param personGroupId string = 'frs-ai-demo-group'
+@description('Face API Dynamic Person Group id used for no-training identification.')
+param dynamicPersonGroupId string = 'frs-ai-demo-group'
 
 @description('Microsoft Entra tenant ID for reviewer sign-in.')
 param entraTenantId string = tenant().tenantId
@@ -135,7 +135,7 @@ module functionApp 'modules/functionapp.bicep' = {
     cosmosFacesContainerName: cosmos.outputs.facesContainerName
     cosmosUploadsContainerName: cosmos.outputs.uploadsContainerName
     faceApiEndpoint: face.outputs.faceEndpoint
-    personGroupId: personGroupId
+    dynamicPersonGroupId: dynamicPersonGroupId
     integrationSubnetId: network.outputs.integrationSubnetId
   }
   dependsOn: [

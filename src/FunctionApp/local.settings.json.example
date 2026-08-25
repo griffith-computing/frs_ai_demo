@@ -19,7 +19,7 @@
     "CosmosDb__FacesContainerName": "Faces",
 
     "FaceApi__Endpoint": "https://<face-account>.cognitiveservices.azure.com/",
-    "FaceApi__PersonGroupId": "frs-ai-demo-group",
+    "FaceApi__DynamicPersonGroupId": "frs-ai-demo-group",
 
     "AZURE_CLIENT_ID": "<user-assigned-identity-client-id-or-blank-for-local-dev>"
   }
