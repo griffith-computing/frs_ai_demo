@@ -1,0 +1,75 @@
+{
+  "$schema": "./schemas/spec.schema.json",
+  "benchmarkVersion": "1.0.0",
+  "name": "FRS Synthetic Face Verification Benchmark",
+  "tolerancePercentagePoints": 5.0,
+  "targets": [95, 90, 85, 80, 75, 70, 65, 60, 55],
+  "evaluationIdentities": [
+    { "identityId": "synthetic-001", "seed": 11001 },
+    { "identityId": "synthetic-002", "seed": 11002 },
+    { "identityId": "synthetic-003", "seed": 11003 },
+    { "identityId": "synthetic-004", "seed": 11004 },
+    { "identityId": "synthetic-005", "seed": 11005 },
+    { "identityId": "synthetic-006", "seed": 11006 },
+    { "identityId": "synthetic-007", "seed": 11007 },
+    { "identityId": "synthetic-008", "seed": 11008 },
+    { "identityId": "synthetic-009", "seed": 11009 },
+    { "identityId": "synthetic-010", "seed": 11010 },
+    { "identityId": "synthetic-011", "seed": 11011 },
+    { "identityId": "synthetic-012", "seed": 11012 },
+    { "identityId": "synthetic-013", "seed": 11013 },
+    { "identityId": "synthetic-014", "seed": 11014 },
+    { "identityId": "synthetic-015", "seed": 11015 },
+    { "identityId": "synthetic-016", "seed": 11016 },
+    { "identityId": "synthetic-017", "seed": 11017 },
+    { "identityId": "synthetic-018", "seed": 11018 },
+    { "identityId": "synthetic-019", "seed": 11019 },
+    { "identityId": "synthetic-020", "seed": 11020 }
+  ],
+  "calibrationIdentities": [
+    { "identityId": "calibration-001", "seed": 21001 },
+    { "identityId": "calibration-002", "seed": 21002 },
+    { "identityId": "calibration-003", "seed": 21003 },
+    { "identityId": "calibration-004", "seed": 21004 },
+    { "identityId": "calibration-005", "seed": 21005 },
+    { "identityId": "calibration-006", "seed": 21006 },
+    { "identityId": "calibration-007", "seed": 21007 },
+    { "identityId": "calibration-008", "seed": 21008 },
+    { "identityId": "calibration-009", "seed": 21009 },
+    { "identityId": "calibration-010", "seed": 21010 }
+  ],
+  "generator": {
+    "name": "FLUX.1-schnell",
+    "provider": "Hugging Face Diffusers",
+    "repository": "https://huggingface.co/black-forest-labs/FLUX.1-schnell",
+    "modelId": "black-forest-labs/FLUX.1-schnell",
+    "revision": "741f7c3ce8b383c54771c7003378a50191e9efe9",
+    "license": "Apache-2.0",
+    "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+    "modelCardUrl": "https://huggingface.co/black-forest-labs/FLUX.1-schnell/blob/741f7c3ce8b383c54771c7003378a50191e9efe9/README.md",
+    "integrity": "Hugging Face snapshot pinned by immutable repository commit; Hub downloads validate file ETags.",
+    "inferenceSteps": 4,
+    "guidanceScale": 0.0,
+    "maxSequenceLength": 256
+  },
+  "referenceModels": {
+    "detector": {
+      "name": "OpenCV YuNet",
+      "revision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+      "filename": "face_detection_yunet_2026may.onnx",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/face_detection_yunet_2026may.onnx",
+      "sha256": "ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/LICENSE"
+    },
+    "recognizer": {
+      "name": "OpenCV SFace",
+      "revision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+      "filename": "face_recognition_sface_2021dec.onnx",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/LICENSE"
+    }
+  }
+}

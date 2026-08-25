@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/griffith-computing/frs_ai_demo/benchmark/schemas/manifest.schema.json",
+  "title": "Generated face benchmark manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "benchmarkVersion",
+    "generatedAtUtc",
+    "toolVersion",
+    "generator",
+    "referenceModels",
+    "referenceCalibration",
+    "artifacts",
+    "pairs"
+  ],
+  "properties": {
+    "benchmarkVersion": { "type": "string" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "toolVersion": { "type": "string" },
+    "generator": { "type": "object" },
+    "referenceModels": { "type": "object" },
+    "referenceCalibration": { "type": "object" },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["imageId", "identityId", "split", "role", "path", "sha256"],
+        "properties": {
+          "imageId": { "type": "string" },
+          "identityId": { "type": "string" },
+          "split": { "enum": ["calibration", "evaluation"] },
+          "role": { "enum": ["enrollment", "probe"] },
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "targetPercentage": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "referencePercentage": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "parameters": { "type": "object" }
+        }
+      }
+    },
+    "pairs": {
+      "type": "array",
+      "items": { "$ref": "score-input.schema.json#/$defs/pair" }
+    }
+  }
+}
