@@ -18,12 +18,18 @@ namespace FrsAiDemo.FunctionApp;
 public sealed class UploadPhotoFunction
 {
     private readonly IBlobStorageService _blobStorageService;
+    private readonly IUploadRepository _uploadRepository;
     private readonly string _containerName;
     private readonly ILogger<UploadPhotoFunction> _logger;
 
-    public UploadPhotoFunction(IBlobStorageService blobStorageService, IConfiguration configuration, ILogger<UploadPhotoFunction> logger)
+    public UploadPhotoFunction(
+        IBlobStorageService blobStorageService,
+        IUploadRepository uploadRepository,
+        IConfiguration configuration,
+        ILogger<UploadPhotoFunction> logger)
     {
         _blobStorageService = blobStorageService;
+        _uploadRepository = uploadRepository;
         _containerName = configuration["PhotosContainerName"] ?? "photos";
         _logger = logger;
     }
@@ -60,6 +66,18 @@ public sealed class UploadPhotoFunction
             ContainerName = _containerName,
             BlobName = blobName
         };
+
+        await _uploadRepository.CreateAsync(new UploadRecord
+        {
+            Id = uploadId,
+            Status = UploadStatuses.Queued,
+            ContainerName = _containerName,
+            BlobName = blobName,
+            BlobUrl = blobUrl,
+            ContentType = contentType,
+            CreatedUtc = uploadEvent.TimestampUtc,
+            UpdatedUtc = uploadEvent.TimestampUtc
+        }, executionContext.CancellationToken);
 
         var response = req.CreateResponse(HttpStatusCode.Accepted);
         await response.WriteAsJsonAsync(uploadEvent);

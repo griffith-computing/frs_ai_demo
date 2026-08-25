@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] - FRS Review</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="app-header">
+        <a class="brand" asp-page="/Index"><span class="brand-mark">FR</span><span>Recognition Review</span></a>
+        <nav aria-label="Primary navigation">
+            <a asp-page="/Index">People</a>
+            <a asp-page="/Upload">Upload</a>
+        </nav>
+        <div class="account">
+            <span>@User.Identity?.Name</span>
+            <a asp-area="MicrosoftIdentity" asp-controller="Account" asp-action="SignOut">Sign out</a>
+        </div>
+    </header>
+    <main class="page-shell">
+        @RenderBody()
+    </main>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

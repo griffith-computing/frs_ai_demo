@@ -4,9 +4,30 @@ obj/
 
 ## Azure Functions local settings (contains connection info - never commit)
 local.settings.json
+local.settings*.json
+!local.settings.json.example
+
+## PhotoUploadHarness local settings (may contain a function key - never commit)
+src/Tools/PhotoUploadHarness/appsettings.json
+
+## Azurite local storage emulator data
+.azurite/
+__azurite_db_*.json
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
 
 ## Bicep / ARM build output
 *.json.bak
+
+## Publish / deployment output
+publish/
+publish.zip
+
+## Build logs
+build_log.txt
+bicep_err.txt
+*.log
 
 ## IDE
 .vs/

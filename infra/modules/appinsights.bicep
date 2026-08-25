@@ -28,3 +28,4 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
+output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id

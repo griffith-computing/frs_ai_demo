@@ -34,6 +34,9 @@ param cosmosDatabaseName string
 @description('Cosmos DB Faces container name.')
 param cosmosFacesContainerName string
 
+@description('Cosmos DB Uploads container name.')
+param cosmosUploadsContainerName string
+
 @description('Azure AI Face API endpoint.')
 param faceApiEndpoint string
 
@@ -43,17 +46,23 @@ param photosContainerName string = 'photos'
 @description('Name of the Face API PersonGroup used for identify/training.')
 param personGroupId string = 'frs-ai-demo-group'
 
+@description('Resource ID of the VNet subnet (delegated to Microsoft.Web/serverFarms) used for outbound VNet integration.')
+param integrationSubnetId string
+
 var hostingPlanName = '${functionAppName}-plan'
 
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: hostingPlanName
   location: location
   sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
+    // Elastic Premium: Consumption (Y1) doesn't support VNet integration, which is required
+    // to reach the storage/Cosmos/Event Hub/Face API private endpoints.
+    name: 'EP1'
+    tier: 'ElasticPremium'
   }
   properties: {
     reserved: false
+    maximumElasticWorkerCount: 20
   }
 }
 
@@ -70,10 +79,26 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   properties: {
     serverFarmId: hostingPlan.id
     httpsOnly: true
+    // No WEBSITE_CONTENTAZUREFILECONNECTIONSTRING/WEBSITE_CONTENTSHARE: Azure Files only
+    // supports key-based auth, which this storage account (no shared key access) can't provide.
+    // Deployment uses zip-deploy instead, per "Create an app without Azure Files" guidance.
+    virtualNetworkSubnetId: integrationSubnetId
+    vnetRouteAllEnabled: true
     siteConfig: {
-      netFrameworkVersion: 'v8.0'
+      netFrameworkVersion: 'v10.0'
       use32BitWorkerProcess: false
       appSettings: [
+        {
+          // Route all outbound through the VNet and resolve private DNS zones (Storage, Cosmos,
+          // Event Hub, Face API) via Azure DNS; without this the Face API private endpoint
+          // hostname can resolve to its public IP and return 403 "not from an approved private endpoint".
+          name: 'WEBSITE_VNET_ROUTE_ALL'
+          value: '1'
+        }
+        {
+          name: 'WEBSITE_DNS_SERVER'
+          value: '168.63.129.16'
+        }
         {
           name: 'AzureWebJobsStorage__accountName'
           value: storageAccountName
@@ -85,6 +110,13 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'AzureWebJobsStorage__clientId'
           value: userAssignedIdentityClientId
+        }
+        {
+          // Function/host keys are normally persisted as blobs in AzureWebJobsStorage, which
+          // requires shared-key access; storage accounts that disable it (as this one does)
+          // can't generate/retrieve keys unless secrets are stored on the local filesystem instead.
+          name: 'AzureWebJobsSecretStorageType'
+          value: 'files'
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -133,6 +165,10 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'CosmosDb__FacesContainerName'
           value: cosmosFacesContainerName
+        }
+        {
+          name: 'CosmosDb__UploadsContainerName'
+          value: cosmosUploadsContainerName
         }
         {
           name: 'FaceApi__Endpoint'

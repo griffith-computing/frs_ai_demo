@@ -4,6 +4,9 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
 
+    "IDENTITY_ENDPOINT": "",
+    "IMDS_ENDPOINT": "",
+
     "PhotosStorageAccountName": "<storage-account-name>",
     "PhotosContainerName": "photos",
 

@@ -16,8 +16,11 @@ resource faceAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
   properties: {
     customSubDomainName: faceAccountName
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Disabled'
     disableLocalAuth: false
+    networkAcls: {
+      defaultAction: 'Deny'
+    }
   }
 }
 

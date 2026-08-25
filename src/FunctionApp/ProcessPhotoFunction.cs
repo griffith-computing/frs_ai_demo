@@ -17,17 +17,20 @@ public sealed class ProcessPhotoFunction
     private readonly IBlobStorageService _blobStorageService;
     private readonly IFaceApiService _faceApiService;
     private readonly ICosmosFaceRepository _faceRepository;
+    private readonly IUploadRepository _uploadRepository;
     private readonly ILogger<ProcessPhotoFunction> _logger;
 
     public ProcessPhotoFunction(
         IBlobStorageService blobStorageService,
         IFaceApiService faceApiService,
         ICosmosFaceRepository faceRepository,
+        IUploadRepository uploadRepository,
         ILogger<ProcessPhotoFunction> logger)
     {
         _blobStorageService = blobStorageService;
         _faceApiService = faceApiService;
         _faceRepository = faceRepository;
+        _uploadRepository = uploadRepository;
         _logger = logger;
     }
 
@@ -61,6 +64,12 @@ public sealed class ProcessPhotoFunction
 
         try
         {
+            await _uploadRepository.SetStatusAsync(
+                uploadEvent.UploadId,
+                UploadStatuses.Processing,
+                detectedFaceCount: null,
+                failureSummary: null,
+                cancellationToken);
             await ProcessUploadEventAsync(uploadEvent, logger, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -69,6 +78,20 @@ public sealed class ProcessPhotoFunction
             // is dead-lettered to a "poison-messages" blob container for manual investigation,
             // rather than retried indefinitely (Event Hub triggers have no built-in poison queue).
             logger.LogError(ex, "Failed to process photo-uploaded event for upload {UploadId}, dead-lettering message", uploadEvent.UploadId);
+            try
+            {
+                await _uploadRepository.SetStatusAsync(
+                    uploadEvent.UploadId,
+                    UploadStatuses.Failed,
+                    detectedFaceCount: null,
+                    failureSummary: "Photo analysis failed.",
+                    CancellationToken.None);
+            }
+            catch (Exception statusException)
+            {
+                logger.LogError(statusException, "Failed to persist failure status for upload {UploadId}", uploadEvent.UploadId);
+            }
+
             await _blobStorageService.UploadPoisonMessageAsync(
                 $"{uploadEvent.UploadId}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.json",
                 JsonSerializer.Serialize(new { uploadEvent, error = ex.ToString() }),
@@ -91,6 +114,12 @@ public sealed class ProcessPhotoFunction
         if (detectedFaces.Count == 0)
         {
             logger.LogInformation("No faces detected in photo {BlobName}", uploadEvent.BlobName);
+            await _uploadRepository.SetStatusAsync(
+                uploadEvent.UploadId,
+                UploadStatuses.NoFaces,
+                detectedFaces.Count,
+                failureSummary: null,
+                cancellationToken);
             return;
         }
 
@@ -127,6 +156,13 @@ public sealed class ProcessPhotoFunction
                 await RegisterNewPersonAsync(uploadEvent, sighting, buffered, cancellationToken);
             }
         }
+
+        await _uploadRepository.SetStatusAsync(
+            uploadEvent.UploadId,
+            UploadStatuses.Completed,
+            detectedFaces.Count,
+            failureSummary: null,
+            cancellationToken);
     }
 
     private async Task RegisterNewPersonAsync(PhotoUploadedEvent uploadEvent, RecognitionEvent sighting, MemoryStream photoStream, CancellationToken cancellationToken)

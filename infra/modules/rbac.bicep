@@ -14,7 +14,9 @@ param faceAccountName string
 param cosmosAccountName string
 
 // Built-in role definition IDs
-var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+// Storage Blob Data Owner (not Contributor): the app creates containers on demand
+// (poison-messages) which requires the containers/write data action that Contributor lacks.
+var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var eventHubDataOwnerRoleId = 'f526a384-b230-433a-b45c-95f59c4a2dec'
 var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 // Cosmos DB's built-in "Cosmos DB Built-in Data Contributor" SQL role definition ID (fixed GUID suffix on every account)
@@ -37,10 +39,10 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' existi
 }
 
 resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, principalId, storageBlobDataContributorRoleId)
+  name: guid(storageAccount.id, principalId, storageBlobDataOwnerRoleId)
   scope: storageAccount
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRoleId)
     principalId: principalId
     principalType: 'ServicePrincipal'
   }

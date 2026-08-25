@@ -27,7 +27,7 @@ resource namespace 'Microsoft.EventHub/namespaces@2023-01-01-preview' = {
   }
   properties: {
     minimumTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Disabled'
     disableLocalAuth: false
   }
 }

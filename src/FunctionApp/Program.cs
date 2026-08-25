@@ -22,7 +22,10 @@ var host = new HostBuilder()
         // identity (AZURE_CLIENT_ID app setting); locally it falls back to Azure CLI/VS credentials.
         var clientId = configuration["AZURE_CLIENT_ID"];
         var credential = string.IsNullOrWhiteSpace(clientId)
-            ? new DefaultAzureCredential()
+            // Exclude managed identity locally: dev machines with an Azure Arc agent installed cause
+            // DefaultAzureCredential to fail hard on an inaccessible Arc token file instead of falling
+            // back to Azure CLI/VS credentials.
+            ? new DefaultAzureCredential(new DefaultAzureCredentialOptions { ExcludeManagedIdentityCredential = true })
             : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
         services.AddSingleton<TokenCredential>(credential);
 
@@ -56,6 +59,7 @@ var host = new HostBuilder()
         services.AddHttpClient<IFaceApiService, FaceApiService>();
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
         services.AddSingleton<ICosmosFaceRepository, CosmosFaceRepository>();
+        services.AddSingleton<IUploadRepository, CosmosUploadRepository>();
     })
     .Build();
 

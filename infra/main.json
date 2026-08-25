@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.46.1.21595",
-      "templateHash": "4564729256595701018"
+      "version": "0.42.1.51946",
+      "templateHash": "17756757317691443967"
     }
   },
   "parameters": {
@@ -31,6 +31,25 @@
       "metadata": {
         "description": "Face API PersonGroup id used for identify/training."
       }
+    },
+    "entraTenantId": {
+      "type": "string",
+      "defaultValue": "[tenant().tenantId]",
+      "metadata": {
+        "description": "Microsoft Entra tenant ID for reviewer sign-in."
+      }
+    },
+    "entraClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client ID of the Microsoft Entra web application registration."
+      }
+    },
+    "entraClientSecret": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Client secret of the Microsoft Entra web application registration."
+      }
     }
   },
   "variables": {
@@ -40,10 +59,159 @@
     "cosmosAccountName": "[toLower(format('{0}-cosmos-{1}', parameters('namePrefix'), variables('suffix')))]",
     "faceAccountName": "[format('{0}-face-{1}', parameters('namePrefix'), variables('suffix'))]",
     "functionAppName": "[format('{0}-func-{1}', parameters('namePrefix'), variables('suffix'))]",
+    "webAppName": "[format('{0}-web-{1}', parameters('namePrefix'), variables('suffix'))]",
     "appInsightsName": "[format('{0}-appi-{1}', parameters('namePrefix'), variables('suffix'))]",
-    "identityName": "[format('{0}-id-{1}', parameters('namePrefix'), variables('suffix'))]"
+    "identityName": "[format('{0}-id-{1}', parameters('namePrefix'), variables('suffix'))]",
+    "webIdentityName": "[format('{0}-web-id-{1}', parameters('namePrefix'), variables('suffix'))]",
+    "vnetName": "[format('{0}-vnet-{1}', parameters('namePrefix'), variables('suffix'))]"
   },
   "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "networkDeploy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "vnetName": {
+            "value": "[variables('vnetName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "1322284174426115998"
+            }
+          },
+          "parameters": {
+            "vnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the virtual network."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the virtual network."
+              }
+            },
+            "addressPrefix": {
+              "type": "string",
+              "defaultValue": "10.20.0.0/16",
+              "metadata": {
+                "description": "Address space for the virtual network."
+              }
+            },
+            "integrationSubnetPrefix": {
+              "type": "string",
+              "defaultValue": "10.20.0.0/24",
+              "metadata": {
+                "description": "Address prefix for the subnet delegated to the Function App for outbound VNet integration."
+              }
+            },
+            "privateEndpointSubnetPrefix": {
+              "type": "string",
+              "defaultValue": "10.20.1.0/24",
+              "metadata": {
+                "description": "Address prefix for the subnet used by private endpoints."
+              }
+            },
+            "webIntegrationSubnetPrefix": {
+              "type": "string",
+              "defaultValue": "10.20.2.0/24",
+              "metadata": {
+                "description": "Address prefix for the subnet delegated to the Linux reviewer web app."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('vnetName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('addressPrefix')]"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "snet-integration",
+                    "properties": {
+                      "addressPrefix": "[parameters('integrationSubnetPrefix')]",
+                      "delegations": [
+                        {
+                          "name": "delegation-serverfarms",
+                          "properties": {
+                            "serviceName": "Microsoft.Web/serverFarms"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "name": "snet-privateendpoints",
+                    "properties": {
+                      "addressPrefix": "[parameters('privateEndpointSubnetPrefix')]",
+                      "privateEndpointNetworkPolicies": "Disabled"
+                    }
+                  },
+                  {
+                    "name": "snet-web-integration",
+                    "properties": {
+                      "addressPrefix": "[parameters('webIntegrationSubnetPrefix')]",
+                      "delegations": [
+                        {
+                          "name": "delegation-serverfarms-web",
+                          "properties": {
+                            "serviceName": "Microsoft.Web/serverFarms"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "outputs": {
+            "vnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+            },
+            "vnetName": {
+              "type": "string",
+              "value": "[parameters('vnetName')]"
+            },
+            "integrationSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName')), '2023-09-01').subnets[0].id]"
+            },
+            "privateEndpointSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName')), '2023-09-01').subnets[1].id]"
+            },
+            "webIntegrationSubnetId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName')), '2023-09-01').subnets[2].id]"
+            }
+          }
+        }
+      }
+    },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -67,8 +235,74 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "6794948414822142457"
+              "version": "0.42.1.51946",
+              "templateHash": "4550275836122795860"
+            }
+          },
+          "parameters": {
+            "identityName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the user-assigned managed identity."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the identity."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('identityName')]",
+              "location": "[parameters('location')]"
+            }
+          ],
+          "outputs": {
+            "identityId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]"
+            },
+            "identityPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]"
+            },
+            "identityClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "webIdentityDeploy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "identityName": {
+            "value": "[variables('webIdentityName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "4550275836122795860"
             }
           },
           "parameters": {
@@ -133,8 +367,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "10611053811751033063"
+              "version": "0.42.1.51946",
+              "templateHash": "17024855948114698746"
             }
           },
           "parameters": {
@@ -171,7 +405,12 @@
               "properties": {
                 "minimumTlsVersion": "TLS1_2",
                 "allowBlobPublicAccess": false,
-                "supportsHttpsTrafficOnly": true
+                "supportsHttpsTrafficOnly": true,
+                "publicNetworkAccess": "Disabled",
+                "networkAcls": {
+                  "defaultAction": "Deny",
+                  "bypass": "AzureServices"
+                }
               }
             },
             {
@@ -234,8 +473,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "1525985805304754013"
+              "version": "0.42.1.51946",
+              "templateHash": "2988082955932480912"
             }
           },
           "parameters": {
@@ -290,7 +529,7 @@
               },
               "properties": {
                 "minimumTlsVersion": "1.2",
-                "publicNetworkAccess": "Enabled",
+                "publicNetworkAccess": "Disabled",
                 "disableLocalAuth": false
               }
             },
@@ -363,8 +602,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "14228477267984958984"
+              "version": "0.42.1.51946",
+              "templateHash": "4181879074705472189"
             }
           },
           "parameters": {
@@ -393,6 +632,20 @@
               "metadata": {
                 "description": "Name of the container that stores per-person face recognition records."
               }
+            },
+            "uploadsContainerName": {
+              "type": "string",
+              "defaultValue": "Uploads",
+              "metadata": {
+                "description": "Name of the container that stores durable photo-processing status."
+              }
+            },
+            "reviewsContainerName": {
+              "type": "string",
+              "defaultValue": "Reviews",
+              "metadata": {
+                "description": "Name of the container that stores reviewer decisions."
+              }
             }
           },
           "resources": [
@@ -415,7 +668,7 @@
                   }
                 ],
                 "disableLocalAuth": false,
-                "publicNetworkAccess": "Enabled"
+                "publicNetworkAccess": "Disabled"
               }
             },
             {
@@ -453,6 +706,52 @@
               "dependsOn": [
                 "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('accountName'), parameters('databaseName'))]"
               ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2023-11-15",
+              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('databaseName'), parameters('uploadsContainerName'))]",
+              "properties": {
+                "resource": {
+                  "id": "[parameters('uploadsContainerName')]",
+                  "partitionKey": {
+                    "paths": [
+                      "/id"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "indexingPolicy": {
+                    "indexingMode": "consistent",
+                    "automatic": true
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('accountName'), parameters('databaseName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2023-11-15",
+              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('databaseName'), parameters('reviewsContainerName'))]",
+              "properties": {
+                "resource": {
+                  "id": "[parameters('reviewsContainerName')]",
+                  "partitionKey": {
+                    "paths": [
+                      "/personId"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "indexingPolicy": {
+                    "indexingMode": "consistent",
+                    "automatic": true
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('accountName'), parameters('databaseName'))]"
+              ]
             }
           ],
           "outputs": {
@@ -475,6 +774,14 @@
             "facesContainerName": {
               "type": "string",
               "value": "[parameters('facesContainerName')]"
+            },
+            "uploadsContainerName": {
+              "type": "string",
+              "value": "[parameters('uploadsContainerName')]"
+            },
+            "reviewsContainerName": {
+              "type": "string",
+              "value": "[parameters('reviewsContainerName')]"
             }
           }
         }
@@ -503,8 +810,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "11173165554948413163"
+              "version": "0.42.1.51946",
+              "templateHash": "10415137021083406252"
             }
           },
           "parameters": {
@@ -540,8 +847,11 @@
               },
               "properties": {
                 "customSubDomainName": "[parameters('faceAccountName')]",
-                "publicNetworkAccess": "Enabled",
-                "disableLocalAuth": false
+                "publicNetworkAccess": "Disabled",
+                "disableLocalAuth": false,
+                "networkAcls": {
+                  "defaultAction": "Deny"
+                }
               }
             }
           ],
@@ -585,8 +895,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "10690395759464560887"
+              "version": "0.42.1.51946",
+              "templateHash": "4116095277292226311"
             }
           },
           "parameters": {
@@ -640,10 +950,528 @@
             "appInsightsInstrumentationKey": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('appInsightsName')))]"
             }
           }
         }
       }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "privateEndpointsDeploy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "privateEndpointSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'networkDeploy'), '2025-04-01').outputs.privateEndpointSubnetId.value]"
+          },
+          "vnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'networkDeploy'), '2025-04-01').outputs.vnetId.value]"
+          },
+          "storageAccountId": {
+            "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+          },
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "eventHubNamespaceId": {
+            "value": "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNamespaceName'))]"
+          },
+          "eventHubNamespaceName": {
+            "value": "[variables('eventHubNamespaceName')]"
+          },
+          "cosmosAccountId": {
+            "value": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+          },
+          "cosmosAccountName": {
+            "value": "[variables('cosmosAccountName')]"
+          },
+          "faceAccountId": {
+            "value": "[resourceId('Microsoft.CognitiveServices/accounts', variables('faceAccountName'))]"
+          },
+          "faceAccountName": {
+            "value": "[variables('faceAccountName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "4300301740837963384"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the private endpoints (should match the target resources region)."
+              }
+            },
+            "privateEndpointSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the VNet subnet to deploy private endpoints into."
+              }
+            },
+            "vnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the VNet to link the private DNS zones to."
+              }
+            },
+            "storageAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the storage account."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the storage account (used to build unique private endpoint names)."
+              }
+            },
+            "eventHubNamespaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Event Hub namespace."
+              }
+            },
+            "eventHubNamespaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Event Hub namespace."
+              }
+            },
+            "cosmosAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Cosmos DB account."
+              }
+            },
+            "cosmosAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Cosmos DB account."
+              }
+            },
+            "faceAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Azure AI Face (Cognitive Services) account."
+              }
+            },
+            "faceAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Face API account."
+              }
+            }
+          },
+          "variables": {
+            "blobDnsZoneName": "privatelink.blob.core.windows.net",
+            "queueDnsZoneName": "privatelink.queue.core.windows.net",
+            "tableDnsZoneName": "privatelink.table.core.windows.net",
+            "cosmosDnsZoneName": "privatelink.documents.azure.com",
+            "serviceBusDnsZoneName": "privatelink.servicebus.windows.net",
+            "cognitiveServicesDnsZoneName": "privatelink.cognitiveservices.azure.com"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('blobDnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('queueDnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('tableDnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('cosmosDnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('serviceBusDnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "[variables('cognitiveServicesDnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', variables('blobDnsZoneName'), format('link-{0}', uniqueString(parameters('vnetId'))))]",
+              "location": "global",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('blobDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', variables('queueDnsZoneName'), format('link-{0}', uniqueString(parameters('vnetId'))))]",
+              "location": "global",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('queueDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', variables('tableDnsZoneName'), format('link-{0}', uniqueString(parameters('vnetId'))))]",
+              "location": "global",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('tableDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', variables('cosmosDnsZoneName'), format('link-{0}', uniqueString(parameters('vnetId'))))]",
+              "location": "global",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('cosmosDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', variables('serviceBusDnsZoneName'), format('link-{0}', uniqueString(parameters('vnetId'))))]",
+              "location": "global",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('serviceBusDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', variables('cognitiveServicesDnsZoneName'), format('link-{0}', uniqueString(parameters('vnetId'))))]",
+              "location": "global",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('cognitiveServicesDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-09-01",
+              "name": "[format('pe-{0}-blob', parameters('storageAccountName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "plsc-blob",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('storageAccountId')]",
+                      "groupIds": [
+                        "blob"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-blob', parameters('storageAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "blob",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('blobDnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('blobDnsZoneName'))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-blob', parameters('storageAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-09-01",
+              "name": "[format('pe-{0}-queue', parameters('storageAccountName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "plsc-queue",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('storageAccountId')]",
+                      "groupIds": [
+                        "queue"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-queue', parameters('storageAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "queue",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('queueDnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('queueDnsZoneName'))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-queue', parameters('storageAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-09-01",
+              "name": "[format('pe-{0}-table', parameters('storageAccountName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "plsc-table",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('storageAccountId')]",
+                      "groupIds": [
+                        "table"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-table', parameters('storageAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "table",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('tableDnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('tableDnsZoneName'))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-table', parameters('storageAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-09-01",
+              "name": "[format('pe-{0}-sql', parameters('cosmosAccountName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "plsc-cosmos",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('cosmosAccountId')]",
+                      "groupIds": [
+                        "Sql"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-sql', parameters('cosmosAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "cosmos",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('cosmosDnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('cosmosDnsZoneName'))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-sql', parameters('cosmosAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-09-01",
+              "name": "[format('pe-{0}-namespace', parameters('eventHubNamespaceName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "plsc-eventhub",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('eventHubNamespaceId')]",
+                      "groupIds": [
+                        "namespace"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-namespace', parameters('eventHubNamespaceName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "servicebus",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('serviceBusDnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-namespace', parameters('eventHubNamespaceName')))]",
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('serviceBusDnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2023-09-01",
+              "name": "[format('pe-{0}-account', parameters('faceAccountName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "plsc-face",
+                    "properties": {
+                      "privateLinkServiceId": "[parameters('faceAccountId')]",
+                      "groupIds": [
+                        "account"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', format('pe-{0}-account', parameters('faceAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "cognitiveservices",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('cognitiveServicesDnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('cognitiveServicesDnsZoneName'))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}-account', parameters('faceAccountName')))]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'cosmosDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'eventHubDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'faceDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'networkDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storageDeploy')]"
+      ]
     },
     {
       "type": "Microsoft.Resources/deployments",
@@ -691,11 +1519,17 @@
           "cosmosFacesContainerName": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.facesContainerName.value]"
           },
+          "cosmosUploadsContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.uploadsContainerName.value]"
+          },
           "faceApiEndpoint": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'faceDeploy'), '2025-04-01').outputs.faceEndpoint.value]"
           },
           "personGroupId": {
             "value": "[parameters('personGroupId')]"
+          },
+          "integrationSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'networkDeploy'), '2025-04-01').outputs.integrationSubnetId.value]"
           }
         },
         "template": {
@@ -704,8 +1538,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "8295708619364539316"
+              "version": "0.42.1.51946",
+              "templateHash": "13097313036290674480"
             }
           },
           "parameters": {
@@ -781,6 +1615,12 @@
                 "description": "Cosmos DB Faces container name."
               }
             },
+            "cosmosUploadsContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos DB Uploads container name."
+              }
+            },
             "faceApiEndpoint": {
               "type": "string",
               "metadata": {
@@ -800,6 +1640,12 @@
               "metadata": {
                 "description": "Name of the Face API PersonGroup used for identify/training."
               }
+            },
+            "integrationSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the VNet subnet (delegated to Microsoft.Web/serverFarms) used for outbound VNet integration."
+              }
             }
           },
           "variables": {
@@ -812,11 +1658,12 @@
               "name": "[variables('hostingPlanName')]",
               "location": "[parameters('location')]",
               "sku": {
-                "name": "Y1",
-                "tier": "Dynamic"
+                "name": "EP1",
+                "tier": "ElasticPremium"
               },
               "properties": {
-                "reserved": false
+                "reserved": false,
+                "maximumElasticWorkerCount": 20
               }
             },
             {
@@ -834,6 +1681,8 @@
               "properties": {
                 "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
                 "httpsOnly": true,
+                "virtualNetworkSubnetId": "[parameters('integrationSubnetId')]",
+                "vnetRouteAllEnabled": true,
                 "siteConfig": {
                   "netFrameworkVersion": "v8.0",
                   "use32BitWorkerProcess": false,
@@ -849,6 +1698,10 @@
                     {
                       "name": "AzureWebJobsStorage__clientId",
                       "value": "[parameters('userAssignedIdentityClientId')]"
+                    },
+                    {
+                      "name": "AzureWebJobsSecretStorageType",
+                      "value": "files"
                     },
                     {
                       "name": "FUNCTIONS_EXTENSION_VERSION",
@@ -899,6 +1752,10 @@
                       "value": "[parameters('cosmosFacesContainerName')]"
                     },
                     {
+                      "name": "CosmosDb__UploadsContainerName",
+                      "value": "[parameters('cosmosUploadsContainerName')]"
+                    },
+                    {
                       "name": "FaceApi__Endpoint",
                       "value": "[parameters('faceApiEndpoint')]"
                     },
@@ -936,6 +1793,8 @@
         "[resourceId('Microsoft.Resources/deployments', 'eventHubDeploy')]",
         "[resourceId('Microsoft.Resources/deployments', 'faceDeploy')]",
         "[resourceId('Microsoft.Resources/deployments', 'identityDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'networkDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'privateEndpointsDeploy')]",
         "[resourceId('Microsoft.Resources/deployments', 'storageDeploy')]"
       ]
     },
@@ -971,8 +1830,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "6958121975328964904"
+              "version": "0.42.1.51946",
+              "templateHash": "6209220894670993877"
             }
           },
           "parameters": {
@@ -1008,7 +1867,7 @@
             }
           },
           "variables": {
-            "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+            "storageBlobDataOwnerRoleId": "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
             "eventHubDataOwnerRoleId": "f526a384-b230-433a-b45c-95f59c4a2dec",
             "cognitiveServicesUserRoleId": "a97b65f3-24c7-4388-baec-2e87135dc908",
             "cosmosDataContributorRoleId": "00000000-0000-0000-0000-000000000002"
@@ -1018,9 +1877,9 @@
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('storageBlobDataContributorRoleId'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('storageBlobDataOwnerRoleId'))]",
               "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataOwnerRoleId'))]",
                 "principalId": "[parameters('principalId')]",
                 "principalType": "ServicePrincipal"
               }
@@ -1067,6 +1926,545 @@
         "[resourceId('Microsoft.Resources/deployments', 'identityDeploy')]",
         "[resourceId('Microsoft.Resources/deployments', 'storageDeploy')]"
       ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "webAppDeploy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "webAppName": {
+            "value": "[variables('webAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "userAssignedIdentityId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'webIdentityDeploy'), '2025-04-01').outputs.identityId.value]"
+          },
+          "userAssignedIdentityClientId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'webIdentityDeploy'), '2025-04-01').outputs.identityClientId.value]"
+          },
+          "integrationSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'networkDeploy'), '2025-04-01').outputs.webIntegrationSubnetId.value]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'appInsightsDeploy'), '2025-04-01').outputs.appInsightsConnectionString.value]"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'appInsightsDeploy'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "entraTenantId": {
+            "value": "[parameters('entraTenantId')]"
+          },
+          "entraClientId": {
+            "value": "[parameters('entraClientId')]"
+          },
+          "entraClientSecret": {
+            "value": "[parameters('entraClientSecret')]"
+          },
+          "cosmosEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.cosmosEndpoint.value]"
+          },
+          "cosmosDatabaseName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.databaseName.value]"
+          },
+          "cosmosFacesContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.facesContainerName.value]"
+          },
+          "cosmosUploadsContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.uploadsContainerName.value]"
+          },
+          "cosmosReviewsContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.reviewsContainerName.value]"
+          },
+          "storageAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storageDeploy'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "eventHubFullyQualifiedNamespace": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'eventHubDeploy'), '2025-04-01').outputs.fullyQualifiedNamespace.value]"
+          },
+          "eventHubName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'eventHubDeploy'), '2025-04-01').outputs.eventHubName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "9725804033738406289"
+            }
+          },
+          "parameters": {
+            "webAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the reviewer web app."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the web app."
+              }
+            },
+            "userAssignedIdentityId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the user-assigned identity attached to the web app."
+              }
+            },
+            "userAssignedIdentityClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Client ID of the user-assigned identity."
+              }
+            },
+            "integrationSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the dedicated App Service VNet integration subnet."
+              }
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string."
+              }
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace resource ID for App Service diagnostics."
+              }
+            },
+            "entraTenantId": {
+              "type": "string",
+              "metadata": {
+                "description": "Microsoft Entra tenant ID for single-tenant sign-in."
+              }
+            },
+            "entraClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Microsoft Entra application client ID."
+              }
+            },
+            "entraClientSecret": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Microsoft Entra application client secret. Supply at deployment time."
+              }
+            },
+            "cosmosEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos DB endpoint URI."
+              }
+            },
+            "cosmosDatabaseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos database name."
+              }
+            },
+            "cosmosFacesContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos Faces container name."
+              }
+            },
+            "cosmosUploadsContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos Uploads container name."
+              }
+            },
+            "cosmosReviewsContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos Reviews container name."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account containing source photos."
+              }
+            },
+            "eventHubFullyQualifiedNamespace": {
+              "type": "string",
+              "metadata": {
+                "description": "Event Hub namespace host name."
+              }
+            },
+            "eventHubName": {
+              "type": "string",
+              "metadata": {
+                "description": "Event Hub name."
+              }
+            }
+          },
+          "variables": {
+            "planName": "[format('{0}-plan', parameters('webAppName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-12-01",
+              "name": "[variables('planName')]",
+              "location": "[parameters('location')]",
+              "kind": "linux",
+              "sku": {
+                "name": "B1",
+                "tier": "Basic"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('webAppName')]",
+              "location": "[parameters('location')]",
+              "kind": "app,linux",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', parameters('userAssignedIdentityId'))]": {}
+                }
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+                "httpsOnly": true,
+                "virtualNetworkSubnetId": "[parameters('integrationSubnetId')]",
+                "vnetRouteAllEnabled": true,
+                "siteConfig": {
+                  "linuxFxVersion": "DOTNETCORE|10.0",
+                  "alwaysOn": true,
+                  "minTlsVersion": "1.2",
+                  "ftpsState": "Disabled",
+                  "healthCheckPath": "/health",
+                  "cors": {
+                    "allowedOrigins": [
+                      "[format('https://{0}.azurewebsites.net', parameters('webAppName'))]"
+                    ],
+                    "supportCredentials": false
+                  },
+                  "appSettings": [
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[parameters('appInsightsConnectionString')]"
+                    },
+                    {
+                      "name": "AZURE_CLIENT_ID",
+                      "value": "[parameters('userAssignedIdentityClientId')]"
+                    },
+                    {
+                      "name": "AzureAd__Instance",
+                      "value": "[environment().authentication.loginEndpoint]"
+                    },
+                    {
+                      "name": "AzureAd__TenantId",
+                      "value": "[parameters('entraTenantId')]"
+                    },
+                    {
+                      "name": "AzureAd__ClientId",
+                      "value": "[parameters('entraClientId')]"
+                    },
+                    {
+                      "name": "AzureAd__ClientSecret",
+                      "value": "[parameters('entraClientSecret')]"
+                    },
+                    {
+                      "name": "AzureAd__CallbackPath",
+                      "value": "/signin-oidc"
+                    },
+                    {
+                      "name": "CosmosDb__Endpoint",
+                      "value": "[parameters('cosmosEndpoint')]"
+                    },
+                    {
+                      "name": "CosmosDb__DatabaseName",
+                      "value": "[parameters('cosmosDatabaseName')]"
+                    },
+                    {
+                      "name": "CosmosDb__FacesContainerName",
+                      "value": "[parameters('cosmosFacesContainerName')]"
+                    },
+                    {
+                      "name": "CosmosDb__UploadsContainerName",
+                      "value": "[parameters('cosmosUploadsContainerName')]"
+                    },
+                    {
+                      "name": "CosmosDb__ReviewsContainerName",
+                      "value": "[parameters('cosmosReviewsContainerName')]"
+                    },
+                    {
+                      "name": "PhotosStorageAccountName",
+                      "value": "[parameters('storageAccountName')]"
+                    },
+                    {
+                      "name": "PhotosContainerName",
+                      "value": "photos"
+                    },
+                    {
+                      "name": "EventHub__FullyQualifiedNamespace",
+                      "value": "[parameters('eventHubFullyQualifiedNamespace')]"
+                    },
+                    {
+                      "name": "EventHub__Name",
+                      "value": "[parameters('eventHubName')]"
+                    },
+                    {
+                      "name": "Uploads__MaxBytes",
+                      "value": "10485760"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
+              "name": "[format('{0}-diagnostics', parameters('webAppName'))]",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ],
+                "metrics": [
+                  {
+                    "category": "AllMetrics",
+                    "enabled": true
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "webAppId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+            },
+            "webAppName": {
+              "type": "string",
+              "value": "[parameters('webAppName')]"
+            },
+            "webAppHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2023-12-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'appInsightsDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'cosmosDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'eventHubDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'networkDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'privateEndpointsDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storageDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'webIdentityDeploy')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "webRbacDeploy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'webIdentityDeploy'), '2025-04-01').outputs.identityPrincipalId.value]"
+          },
+          "storageAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storageDeploy'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "eventHubNamespaceName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'eventHubDeploy'), '2025-04-01').outputs.namespaceName.value]"
+          },
+          "eventHubName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'eventHubDeploy'), '2025-04-01').outputs.eventHubName.value]"
+          },
+          "cosmosAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.cosmosAccountName.value]"
+          },
+          "cosmosDatabaseName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.databaseName.value]"
+          },
+          "facesContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.facesContainerName.value]"
+          },
+          "uploadsContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.uploadsContainerName.value]"
+          },
+          "reviewsContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.reviewsContainerName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "10617314623976528759"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the reviewer web app managed identity."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name."
+              }
+            },
+            "photosContainerName": {
+              "type": "string",
+              "defaultValue": "photos",
+              "metadata": {
+                "description": "Photos blob container name."
+              }
+            },
+            "eventHubNamespaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Event Hub namespace name."
+              }
+            },
+            "eventHubName": {
+              "type": "string",
+              "metadata": {
+                "description": "Event Hub name."
+              }
+            },
+            "cosmosAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos account name."
+              }
+            },
+            "cosmosDatabaseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos database name."
+              }
+            },
+            "facesContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos Faces container name."
+              }
+            },
+            "uploadsContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos Uploads container name."
+              }
+            },
+            "reviewsContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos Reviews container name."
+              }
+            }
+          },
+          "variables": {
+            "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+            "eventHubDataSenderRoleId": "2b629674-e913-4c01-ae53-ef4638d8f975",
+            "cosmosDataReaderRoleId": "00000000-0000-0000-0000-000000000001",
+            "cosmosDataContributorRoleId": "00000000-0000-0000-0000-000000000002"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('photosContainerName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('photosContainerName')), parameters('principalId'), variables('storageBlobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubNamespaceName'), parameters('eventHubName'))]",
+              "name": "[guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubNamespaceName'), parameters('eventHubName')), parameters('principalId'), variables('eventHubDataSenderRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('eventHubDataSenderRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+              "apiVersion": "2023-11-15",
+              "name": "[format('{0}/{1}', parameters('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('principalId'), parameters('facesContainerName'), variables('cosmosDataReaderRoleId')))]",
+              "properties": {
+                "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), variables('cosmosDataReaderRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "scope": "[format('{0}/dbs/{1}/colls/{2}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('cosmosDatabaseName'), parameters('facesContainerName'))]"
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+              "apiVersion": "2023-11-15",
+              "name": "[format('{0}/{1}', parameters('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('principalId'), parameters('uploadsContainerName'), variables('cosmosDataContributorRoleId')))]",
+              "properties": {
+                "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), variables('cosmosDataContributorRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "scope": "[format('{0}/dbs/{1}/colls/{2}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('cosmosDatabaseName'), parameters('uploadsContainerName'))]"
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+              "apiVersion": "2023-11-15",
+              "name": "[format('{0}/{1}', parameters('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('principalId'), parameters('reviewsContainerName'), variables('cosmosDataContributorRoleId')))]",
+              "properties": {
+                "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), variables('cosmosDataContributorRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "scope": "[format('{0}/dbs/{1}/colls/{2}', resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), parameters('cosmosDatabaseName'), parameters('reviewsContainerName'))]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'cosmosDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'eventHubDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storageDeploy')]",
+        "[resourceId('Microsoft.Resources/deployments', 'webIdentityDeploy')]"
+      ]
     }
   ],
   "outputs": {
@@ -1094,9 +2492,25 @@
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.cosmosAccountName.value]"
     },
+    "cosmosUploadsContainerName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.uploadsContainerName.value]"
+    },
+    "cosmosReviewsContainerName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.reviewsContainerName.value]"
+    },
     "faceAccountName": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'faceDeploy'), '2025-04-01').outputs.faceAccountName.value]"
+    },
+    "webAppName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'webAppDeploy'), '2025-04-01').outputs.webAppName.value]"
+    },
+    "webAppHostName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'webAppDeploy'), '2025-04-01').outputs.webAppHostName.value]"
     }
   }
 }

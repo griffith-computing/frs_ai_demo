@@ -1,0 +1,58 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "People";
+}
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Analysis records</p>
+        <h1>Recognized people</h1>
+        <p>Inspect confidence, source photos, and recognition history.</p>
+    </div>
+    <form method="get" class="search-form">
+        <label for="personId">Find exact person ID</label>
+        <div class="inline-control">
+            <input id="personId" name="personId" autocomplete="off" placeholder="Person ID" />
+            <button type="submit">Find</button>
+        </div>
+    </form>
+</section>
+
+@if (Model.People.Count == 0)
+{
+    <div class="empty-state">
+        <h2>No face records yet</h2>
+        <p>Upload a photo to begin analysis.</p>
+        <a class="button" asp-page="/Upload">Upload photo</a>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Person</th><th>Last seen</th><th>Sightings</th><th>Latest confidence</th><th></th></tr>
+            </thead>
+            <tbody>
+            @foreach (var person in Model.People)
+            {
+                var latest = person.RecognitionHistory.OrderByDescending(item => item.TimestampUtc).FirstOrDefault();
+                <tr>
+                    <td><span class="mono">@person.PersonId</span></td>
+                    <td><time datetime="@person.LastSeenUtc.ToString("O")">@person.LastSeenUtc.ToLocalTime().ToString("g")</time></td>
+                    <td>@person.RecognitionHistory.Count</td>
+                    <td><span class="confidence">@((latest?.Confidence ?? 0).ToString("P1"))</span></td>
+                    <td><a asp-page="/Person" asp-route-id="@person.PersonId">Review</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    @if (Model.NextToken is not null)
+    {
+        <nav class="pager" aria-label="Pagination">
+            <a class="button secondary" asp-page="/Index" asp-route-continuationToken="@Model.NextToken">Next page</a>
+        </nav>
+    }
+}

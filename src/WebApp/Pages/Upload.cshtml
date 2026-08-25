@@ -1,0 +1,37 @@
+@page
+@model UploadModel
+@{
+    ViewData["Title"] = "Upload";
+}
+
+<section class="page-heading compact">
+    <div>
+        <p class="eyebrow">New analysis</p>
+        <h1>Upload a photo</h1>
+        <p>JPEG or PNG, up to 10 MB.</p>
+    </div>
+</section>
+
+<form method="post" enctype="multipart/form-data" class="upload-workspace">
+    <div asp-validation-summary="ModelOnly" class="validation" role="alert"></div>
+    <label class="drop-zone" for="photo">
+        <span class="drop-title">Choose a source photo</span>
+        <span>or drop it here</span>
+        <input asp-for="Photo" id="photo" type="file" accept="image/jpeg,image/png" />
+    </label>
+    <span asp-validation-for="Photo" class="validation"></span>
+    <img id="preview" class="upload-preview" alt="Selected photo preview" hidden />
+    <button type="submit">Queue analysis</button>
+</form>
+
+@section Scripts {
+<script>
+const input = document.getElementById('photo');
+const preview = document.getElementById('preview');
+input.addEventListener('change', () => {
+    if (!input.files.length) { preview.hidden = true; return; }
+    preview.src = URL.createObjectURL(input.files[0]);
+    preview.hidden = false;
+});
+</script>
+}

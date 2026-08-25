@@ -1,0 +1,53 @@
+@page "{id}"
+@model PersonModel
+@{
+    ViewData["Title"] = "Person review";
+}
+
+<section class="page-heading compact">
+    <div>
+        <a class="back-link" asp-page="/Index">Back to people</a>
+        <h1>Person <span class="mono">@Model.PersonRecord.PersonId</span></h1>
+        <p>First seen @Model.PersonRecord.FirstSeenUtc.ToLocalTime().ToString("g") · Last seen @Model.PersonRecord.LastSeenUtc.ToLocalTime().ToString("g")</p>
+    </div>
+</section>
+
+@if (TempData["ReviewSaved"] is string message)
+{
+    <div class="notice" role="status">@message</div>
+}
+
+<div class="sighting-list">
+@foreach (var item in Model.Sightings)
+{
+    <article class="sighting">
+        <div class="photo-frame">
+            <img src="@Url.Page("/Photo", new { personId = Model.PersonRecord.PersonId, sightingKey = item.Key })" alt="Source photo from @item.Sighting.TimestampUtc.ToLocalTime().ToString("g")" loading="lazy" />
+        </div>
+        <div class="sighting-detail">
+            <div class="sighting-meta">
+                <div><span>Observed</span><strong>@item.Sighting.TimestampUtc.ToLocalTime().ToString("g")</strong></div>
+                <div><span>Confidence</span><strong>@item.Sighting.Confidence.ToString("P1")</strong></div>
+                <div><span>Face ID</span><strong class="mono">@(item.Sighting.FaceId ?? "Unavailable")</strong></div>
+            </div>
+            <form method="post" asp-page-handler="Review" class="review-form">
+                <input type="hidden" name="id" value="@Model.PersonRecord.PersonId" />
+                <input type="hidden" name="sightingKey" value="@item.Key" />
+                <fieldset>
+                    <legend>Recognition result</legend>
+                    @foreach (var decision in Enum.GetValues<ReviewDecision>())
+                    {
+                        <label class="choice">
+                            <input type="radio" name="decision" value="@decision" checked="@(item.Review?.Decision == decision.ToString())" />
+                            <span>@decision</span>
+                        </label>
+                    }
+                </fieldset>
+                <label for="note-@item.Key">Reviewer note</label>
+                <textarea id="note-@item.Key" name="note" maxlength="500" rows="3">@item.Review?.Note</textarea>
+                <button type="submit">Save review</button>
+            </form>
+        </div>
+    </article>
+}
+</div>
