@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,30 @@ from face_benchmark.model_files import ensure_reference_models
 
 
 class ModelFileTests(unittest.TestCase):
+    def test_bundled_detector_requires_no_downloaded_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model_root = root / "models"
+            model_root.mkdir()
+            recognizer = model_root / "recognizer.onnx"
+            recognizer.write_bytes(b"recognizer")
+            models = {
+                "detector": {
+                    "source": "opencv-package",
+                    "filename": "haarcascade_frontalface_default.xml",
+                },
+                "recognizer": {
+                    "url": "https://example.test/recognizer.onnx",
+                    "sha256": hashlib.sha256(b"recognizer").hexdigest(),
+                    "filename": "recognizer.onnx",
+                },
+            }
+
+            paths = ensure_reference_models(models, model_root)
+
+            self.assertIsNone(paths["detector"])
+            self.assertEqual(recognizer.resolve(), paths["recognizer"])
+
     def test_rejects_filename_outside_model_directory_without_deleting_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

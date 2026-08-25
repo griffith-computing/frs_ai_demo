@@ -11,14 +11,21 @@ from .errors import BenchmarkError
 
 def ensure_reference_models(
     reference_models: dict[str, Any], model_directory: Path
-) -> dict[str, Path]:
+) -> dict[str, Path | None]:
     model_root = model_directory.resolve()
     model_root.mkdir(parents=True, exist_ok=True)
-    result: dict[str, Path] = {}
+    result: dict[str, Path | None] = {}
     for role in ("detector", "recognizer"):
         model = reference_models.get(role)
         if not isinstance(model, dict):
             raise BenchmarkError(f"Reference model '{role}' is not configured.")
+        if model.get("source") == "opencv-package":
+            if role != "detector":
+                raise BenchmarkError(
+                    "Only the detector may use the OpenCV package as its source."
+                )
+            result[role] = None
+            continue
         url = model.get("url")
         expected_hash = model.get("sha256")
         if not isinstance(url, str) or not url.startswith("https://"):

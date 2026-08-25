@@ -7,7 +7,7 @@ from .errors import BenchmarkError
 
 
 class SFaceReference:
-    def __init__(self, detector_path: Path, recognizer_path: Path) -> None:
+    def __init__(self, detector_path: Path | None, recognizer_path: Path) -> None:
         try:
             import cv2
         except ImportError as error:
@@ -15,20 +15,36 @@ class SFaceReference:
                 "Generation support is not installed. Run 'uv sync --extra generation'."
             ) from error
         self._cv2 = cv2
-        self._detector = cv2.FaceDetectorYN.create(
-            str(detector_path),
-            "",
-            (320, 320),
-            0.7,
-            0.3,
-            5000,
+        self._detector = (
+            cv2.FaceDetectorYN.create(
+                str(detector_path),
+                "",
+                (320, 320),
+                0.7,
+                0.3,
+                5000,
+            )
+            if detector_path is not None
+            else None
         )
+        self._haar_detector = None
+        if detector_path is None:
+            cascade_path = (
+                Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
+            )
+            self._haar_detector = cv2.CascadeClassifier(str(cascade_path))
+            if self._haar_detector.empty():
+                raise BenchmarkError(
+                    f"OpenCV bundled face detector could not be loaded from '{cascade_path}'."
+                )
         self._recognizer = cv2.FaceRecognizerSF.create(str(recognizer_path), "")
 
     def feature(self, image: Any) -> Any:
         cv2 = self._cv2
         if not hasattr(image, "shape"):
             image = cv2.cvtColor(self._pil_to_array(image), cv2.COLOR_RGB2BGR)
+        if self._detector is None:
+            return self._haar_feature(image)
         height, width = image.shape[:2]
         self._detector.setInputSize((width, height))
         _, faces = self._detector.detect(image)
@@ -38,6 +54,36 @@ class SFaceReference:
                 f"Reference detector expected exactly one face but found {count}."
             )
         aligned = self._recognizer.alignCrop(image, faces[0])
+        return self._recognizer.feature(aligned)
+
+    def _haar_feature(self, image: Any) -> Any:
+        cv2 = self._cv2
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = self._haar_detector.detectMultiScale(
+            cv2.equalizeHist(gray),
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(80, 80),
+        )
+        count = len(faces)
+        if count != 1:
+            raise BenchmarkError(
+                f"Bundled reference detector expected exactly one face but found {count}."
+            )
+        x, y, width, height = (int(value) for value in faces[0])
+        side = round(max(width, height) * 1.35)
+        center_x = x + width // 2
+        center_y = y + height // 2
+        left = max(0, center_x - side // 2)
+        top = max(0, center_y - side // 2)
+        right = min(image.shape[1], left + side)
+        bottom = min(image.shape[0], top + side)
+        left = max(0, right - side)
+        top = max(0, bottom - side)
+        crop = image[top:bottom, left:right]
+        if crop.size == 0:
+            raise BenchmarkError("Bundled reference detector produced an empty face crop.")
+        aligned = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
         return self._recognizer.feature(aligned)
 
     def score(self, first_feature: Any, second_feature: Any) -> float:
