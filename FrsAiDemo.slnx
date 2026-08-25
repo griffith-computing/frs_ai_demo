@@ -5,6 +5,7 @@
     <Project Path="src/WebApp/FrsAiDemo.WebApp.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FunctionApp.Tests/FrsAiDemo.FunctionApp.Tests.csproj" />
     <Project Path="tests/WebApp.Tests/FrsAiDemo.WebApp.Tests.csproj" />
   </Folder>
 </Solution>

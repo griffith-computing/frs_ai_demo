@@ -7,7 +7,7 @@ namespace FrsAiDemo.FunctionApp.Services;
 
 public interface ICosmosFaceRepository
 {
-    Task<FaceRecord> CreateFaceRecordAsync(string personId, string personGroupId, RecognitionEvent firstSighting, CancellationToken cancellationToken);
+    Task<FaceRecord> CreateFaceRecordAsync(string personId, string recognitionGroupId, RecognitionEvent firstSighting, CancellationToken cancellationToken);
     Task<FaceRecord> RecordRecognitionAsync(string personId, RecognitionEvent sighting, CancellationToken cancellationToken);
 }
 
@@ -29,13 +29,13 @@ public sealed class CosmosFaceRepository : ICosmosFaceRepository
         _logger = logger;
     }
 
-    public async Task<FaceRecord> CreateFaceRecordAsync(string personId, string personGroupId, RecognitionEvent firstSighting, CancellationToken cancellationToken)
+    public async Task<FaceRecord> CreateFaceRecordAsync(string personId, string recognitionGroupId, RecognitionEvent firstSighting, CancellationToken cancellationToken)
     {
         var record = new FaceRecord
         {
             Id = personId,
             PersonId = personId,
-            PersonGroupId = personGroupId,
+            PersonGroupId = recognitionGroupId,
             FirstSeenUtc = firstSighting.TimestampUtc,
             LastSeenUtc = firstSighting.TimestampUtc,
             RecognitionHistory = { firstSighting }

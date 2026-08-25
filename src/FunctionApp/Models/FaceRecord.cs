@@ -21,7 +21,7 @@ public sealed class RecognitionEvent
 }
 
 /// <summary>
-/// Cosmos DB document representing a person recognized by the Face API PersonGroup.
+/// Cosmos DB document representing a person recognized by the Face API person directory.
 /// Partitioned by /personId. Created on first sighting, updated (lastSeenUtc + history) on
 /// every subsequent recognition of the same person.
 /// </summary>
@@ -31,11 +31,12 @@ public sealed class FaceRecord
     [JsonPropertyName("id")]
     public required string Id { get; init; }
 
-    /// <summary>Azure AI Face API PersonGroupPerson id. Also the partition key value.</summary>
+    /// <summary>Azure AI Face API Person Directory person id. Also the partition key value.</summary>
     [JsonPropertyName("personId")]
     public required string PersonId { get; init; }
 
     [JsonPropertyName("personGroupId")]
+    // The JSON property name is retained so records created by the legacy PersonGroup flow stay readable.
     public required string PersonGroupId { get; init; }
 
     [JsonPropertyName("firstSeenUtc")]

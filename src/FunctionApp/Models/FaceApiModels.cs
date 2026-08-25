@@ -46,16 +46,10 @@ public sealed class IdentifyCandidate
     public double Confidence { get; init; }
 }
 
-public sealed class PersonGroupTrainingStatus
+public sealed class FaceOperationResult
 {
     [JsonPropertyName("status")]
     public string? Status { get; init; }
-
-    [JsonPropertyName("createdDateTime")]
-    public DateTimeOffset? CreatedDateTime { get; init; }
-
-    [JsonPropertyName("lastActionDateTime")]
-    public DateTimeOffset? LastActionDateTime { get; init; }
 
     [JsonPropertyName("message")]
     public string? Message { get; init; }

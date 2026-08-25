@@ -43,8 +43,8 @@ param faceApiEndpoint string
 @description('Name of the blob container used to store uploaded photos.')
 param photosContainerName string = 'photos'
 
-@description('Name of the Face API PersonGroup used for identify/training.')
-param personGroupId string = 'frs-ai-demo-group'
+@description('Name of the Face API Dynamic Person Group used for no-training identification.')
+param dynamicPersonGroupId string = 'frs-ai-demo-group'
 
 @description('Resource ID of the VNet subnet (delegated to Microsoft.Web/serverFarms) used for outbound VNet integration.')
 param integrationSubnetId string
@@ -175,8 +175,8 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: faceApiEndpoint
         }
         {
-          name: 'FaceApi__PersonGroupId'
-          value: personGroupId
+          name: 'FaceApi__DynamicPersonGroupId'
+          value: dynamicPersonGroupId
         }
       ]
     }
