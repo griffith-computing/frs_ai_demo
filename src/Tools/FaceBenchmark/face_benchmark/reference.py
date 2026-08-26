@@ -39,12 +39,12 @@ class SFaceReference:
                 )
         self._recognizer = cv2.FaceRecognizerSF.create(str(recognizer_path), "")
 
-    def feature(self, image: Any) -> Any:
+    def feature(self, image: Any, allow_center_fallback: bool = False) -> Any:
         cv2 = self._cv2
         if not hasattr(image, "shape"):
             image = cv2.cvtColor(self._pil_to_array(image), cv2.COLOR_RGB2BGR)
         if self._detector is None:
-            return self._haar_feature(image)
+            return self._haar_feature(image, allow_center_fallback)
         height, width = image.shape[:2]
         self._detector.setInputSize((width, height))
         _, faces = self._detector.detect(image)
@@ -56,7 +56,7 @@ class SFaceReference:
         aligned = self._recognizer.alignCrop(image, faces[0])
         return self._recognizer.feature(aligned)
 
-    def _haar_feature(self, image: Any) -> Any:
+    def _haar_feature(self, image: Any, allow_center_fallback: bool) -> Any:
         cv2 = self._cv2
         image_height, image_width = image.shape[:2]
         minimum_face_size = max(80, min(image_width, image_height) // 6)
@@ -67,11 +67,16 @@ class SFaceReference:
             minNeighbors=6,
             minSize=(minimum_face_size, minimum_face_size),
         )
-        x, y, width, height = select_dominant_face(
-            [tuple(int(value) for value in face) for face in faces],
-            image_width,
-            image_height,
-        )
+        try:
+            x, y, width, height = select_dominant_face(
+                [tuple(int(value) for value in face) for face in faces],
+                image_width,
+                image_height,
+            )
+        except BenchmarkError:
+            if allow_center_fallback:
+                return self._center_crop_feature(image)
+            raise
         side = round(max(width, height) * 1.35)
         center_x = x + width // 2
         center_y = y + height // 2
@@ -85,6 +90,19 @@ class SFaceReference:
         if crop.size == 0:
             raise BenchmarkError("Bundled reference detector produced an empty face crop.")
         aligned = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
+        return self._recognizer.feature(aligned)
+
+    def _center_crop_feature(self, image: Any) -> Any:
+        image_height, image_width = image.shape[:2]
+        side = round(min(image_width, image_height) * 0.72)
+        left = (image_width - side) // 2
+        top = (image_height - side) // 2
+        crop = image[top : top + side, left : left + side]
+        aligned = self._cv2.resize(
+            crop,
+            (112, 112),
+            interpolation=self._cv2.INTER_AREA,
+        )
         return self._recognizer.feature(aligned)
 
     def score(self, first_feature: Any, second_feature: Any) -> float:

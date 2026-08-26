@@ -77,6 +77,44 @@ class ReferenceTests(unittest.TestCase):
                 1024,
             )
 
+    def test_probe_can_use_deterministic_center_crop_when_detection_fails(self) -> None:
+        try:
+            import numpy
+        except ImportError:
+            self.skipTest("generation dependencies are not installed")
+
+        class Detector:
+            @staticmethod
+            def detectMultiScale(*args: object, **kwargs: object) -> list[object]:
+                return []
+
+        class Recognizer:
+            @staticmethod
+            def feature(image: object) -> tuple[int, ...]:
+                return image.shape
+
+        fake_cv2 = types.SimpleNamespace(
+            COLOR_BGR2GRAY=1,
+            INTER_AREA=2,
+            cvtColor=lambda image, mode: image[:, :, 0],
+            equalizeHist=lambda image: image,
+            resize=lambda image, size, interpolation: numpy.zeros(
+                (size[1], size[0], 3), dtype=numpy.uint8
+            ),
+        )
+        reference = object.__new__(SFaceReference)
+        reference._cv2 = fake_cv2
+        reference._haar_detector = Detector()
+        reference._recognizer = Recognizer()
+        image = numpy.zeros((1024, 1024, 3), dtype=numpy.uint8)
+
+        with self.assertRaisesRegex(BenchmarkError, "found no face"):
+            reference._haar_feature(image, allow_center_fallback=False)
+        self.assertEqual(
+            (112, 112, 3),
+            reference._haar_feature(image, allow_center_fallback=True),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

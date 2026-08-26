@@ -134,6 +134,7 @@ def generate_library(
         ("evaluation", spec.evaluation_identities),
     ):
         for identity in identities:
+            print(f"Generating {split} enrollment {identity.identity_id}...")
             encoded, image, feature, generator_seed = _generate_enrollment(
                 generator,
                 reference,
@@ -164,6 +165,7 @@ def generate_library(
 
     calibration_features: dict[str, Any] = {}
     for identity in spec.calibration_identities:
+        print(f"Generating calibration probes for {identity.identity_id}...")
         enrollment = enrollment_images[("calibration", identity.identity_id)]
         for index, strength in enumerate(CALIBRATION_STRENGTHS, start=1):
             probe, parameters = augment(
@@ -173,7 +175,10 @@ def generate_library(
             )
             encoded = _encode_image(probe, "JPEG")
             persisted_probe = _decode_image(encoded)
-            feature = reference.feature(persisted_probe)
+            feature = reference.feature(
+                persisted_probe,
+                allow_center_fallback=True,
+            )
             image_id = f"{identity.identity_id}-probe-{index:03d}"
             path = _write_image(
                 encoded,
@@ -216,6 +221,7 @@ def generate_library(
             artifact["referencePercentage"] = calibration.normalize(raw_score)
 
     for identity in spec.evaluation_identities:
+        print(f"Selecting evaluation targets for {identity.identity_id}...")
         enrollment = enrollment_images[("evaluation", identity.identity_id)]
         enrollment_feature = enrollment_features[("evaluation", identity.identity_id)]
         candidates, failures = _candidate_pool(
@@ -354,7 +360,10 @@ def _candidate_pool(
             encoded = _encode_image(probe, "JPEG")
             persisted_probe = _decode_image(encoded)
             try:
-                feature = reference.feature(persisted_probe)
+                feature = reference.feature(
+                    persisted_probe,
+                    allow_center_fallback=True,
+                )
             except BenchmarkError:
                 failures += 1
                 continue
