@@ -89,6 +89,13 @@ $tool = "src\Tools\FaceBenchmark"
 & $uv sync --project $tool --extra azure
 ```
 
+If an environment was created with an earlier benchmark version, refresh it so
+the pinned fast tokenizer stack is installed:
+
+```powershell
+& $uv sync --project $tool --extra generation --refresh
+```
+
 The pinned generator is Black Forest Labs FLUX.1-schnell, whose code and model
 weights are Apache-2.0 licensed. The model is pinned to an immutable Hugging
 Face repository revision; Hub downloads validate artifact ETags. Model weights
@@ -286,6 +293,7 @@ independently; never compare raw confidences directly.
 |---|---|
 | Recognizer checksum mismatch | Delete the cached SFace file and retry. Do not bypass checksum validation. |
 | SFace download has an SSL error | Download `face_recognition_sface_2021dec.onnx` through an approved browser or artifact mirror and pass its path with `--recognizer-model`; its SHA-256 is still verified against `spec.json`. |
+| `add_prefix_space` / slow tokenizer error | Run `uv sync --project src\Tools\FaceBenchmark --extra generation --refresh`. Version 1.1.1 explicitly pins and loads FLUX's fast CLIP and T5 tokenizers. |
 | Zero or multiple faces | Keep the failure; do not hand-edit the image. Confirm the pinned OpenCV package version. |
 | Target cannot be reached | Confirm pinned generator/reference versions and supported runtime. The run is not valid if generation only partially completes. |
 | Azure returns 401/403 | Confirm endpoint, RBAC, token tenant, and Face Limited Access approval. |

@@ -30,6 +30,7 @@ class FluxIdentityGenerator:
         try:
             import torch
             from diffusers import FluxPipeline
+            from transformers import CLIPTokenizerFast, T5TokenizerFast
         except ImportError as error:
             raise BenchmarkError(
                 "Generation support is not installed. Run 'uv sync --extra generation'."
@@ -41,12 +42,34 @@ class FluxIdentityGenerator:
         self._torch = torch
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if self._device == "cuda" else torch.float32
-        self._pipeline = FluxPipeline.from_pretrained(
-            model_id,
-            revision=revision,
-            torch_dtype=dtype,
-            use_safetensors=True,
-        )
+        try:
+            tokenizer = CLIPTokenizerFast.from_pretrained(
+                model_id,
+                subfolder="tokenizer",
+                revision=revision,
+                add_prefix_space=False,
+            )
+            tokenizer_2 = T5TokenizerFast.from_pretrained(
+                model_id,
+                subfolder="tokenizer_2",
+                revision=revision,
+            )
+            self._pipeline = FluxPipeline.from_pretrained(
+                model_id,
+                revision=revision,
+                torch_dtype=dtype,
+                use_safetensors=True,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+            )
+        except ValueError as error:
+            if "add_prefix_space" in str(error):
+                raise BenchmarkError(
+                    "FLUX requires the pinned fast tokenizer runtime. Run "
+                    "'uv sync --project src/Tools/FaceBenchmark --extra generation "
+                    "--refresh' and retry."
+                ) from error
+            raise
         if self._device == "cuda":
             self._pipeline.enable_model_cpu_offload()
         else:
