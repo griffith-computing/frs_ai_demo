@@ -144,6 +144,12 @@ reference-calibrated result. The morph fraction and donor identity are recorded
 in the manifest. This controlled genuine-to-impostor path produces intermediate
 reference scores that ordinary blur, noise, and JPEG degradation often cannot
 produce because modern face embeddings are intentionally invariant to them.
+Recognizer embeddings are copied immediately so OpenCV cannot overwrite a
+previously stored feature through a reused native output buffer.
+Haar validates that enrollments contain one unambiguous face, while reference
+feature extraction always uses the same deterministic center crop. Keeping the
+crop fixed prevents detector-box changes from introducing score jumps during a
+morph.
 
 Generation is seeded and versions are pinned, but GPU libraries can introduce
 platform-specific numerical variation. Archive the generated manifest with any

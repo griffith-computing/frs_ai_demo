@@ -115,6 +115,65 @@ class ReferenceTests(unittest.TestCase):
             reference._haar_feature(image, allow_center_fallback=True),
         )
 
+    def test_features_own_their_memory_when_recognizer_reuses_output(self) -> None:
+        try:
+            import numpy
+        except ImportError:
+            self.skipTest("generation dependencies are not installed")
+
+        shared = numpy.zeros((1, 4), dtype=numpy.float32)
+
+        class Recognizer:
+            @staticmethod
+            def feature(image: object) -> object:
+                shared.fill(float(image))
+                return shared
+
+        reference = object.__new__(SFaceReference)
+        reference._recognizer = Recognizer()
+
+        first = reference._owned_feature(1)
+        second = reference._owned_feature(2)
+
+        self.assertEqual([1.0, 1.0, 1.0, 1.0], first.tolist()[0])
+        self.assertEqual([2.0, 2.0, 2.0, 2.0], second.tolist()[0])
+        self.assertIsNot(first, second)
+
+    def test_detected_probe_uses_same_fixed_crop_as_fallback(self) -> None:
+        try:
+            import numpy
+        except ImportError:
+            self.skipTest("generation dependencies are not installed")
+
+        class Detector:
+            @staticmethod
+            def detectMultiScale(*args: object, **kwargs: object) -> list[object]:
+                return [(100, 120, 500, 500)]
+
+        class Recognizer:
+            @staticmethod
+            def feature(image: object) -> object:
+                return image.copy()
+
+        fake_cv2 = types.SimpleNamespace(
+            COLOR_BGR2GRAY=1,
+            INTER_AREA=2,
+            cvtColor=lambda image, mode: image[:, :, 0],
+            equalizeHist=lambda image: image,
+            resize=lambda image, size, interpolation: numpy.full(
+                (size[1], size[0], 3), image.shape[0], dtype=numpy.int32
+            ),
+        )
+        reference = object.__new__(SFaceReference)
+        reference._cv2 = fake_cv2
+        reference._haar_detector = Detector()
+        reference._recognizer = Recognizer()
+        image = numpy.zeros((1000, 800, 3), dtype=numpy.uint8)
+
+        feature = reference._haar_feature(image, allow_center_fallback=False)
+
+        self.assertTrue(numpy.all(feature == 576))
+
 
 if __name__ == "__main__":
     unittest.main()

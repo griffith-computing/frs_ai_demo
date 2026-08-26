@@ -54,7 +54,7 @@ class SFaceReference:
                 f"Reference detector expected exactly one face but found {count}."
             )
         aligned = self._recognizer.alignCrop(image, faces[0])
-        return self._recognizer.feature(aligned)
+        return self._owned_feature(aligned)
 
     def _haar_feature(self, image: Any, allow_center_fallback: bool) -> Any:
         cv2 = self._cv2
@@ -68,7 +68,7 @@ class SFaceReference:
             minSize=(minimum_face_size, minimum_face_size),
         )
         try:
-            x, y, width, height = select_dominant_face(
+            select_dominant_face(
                 [tuple(int(value) for value in face) for face in faces],
                 image_width,
                 image_height,
@@ -77,20 +77,7 @@ class SFaceReference:
             if allow_center_fallback:
                 return self._center_crop_feature(image)
             raise
-        side = round(max(width, height) * 1.35)
-        center_x = x + width // 2
-        center_y = y + height // 2
-        left = max(0, center_x - side // 2)
-        top = max(0, center_y - side // 2)
-        right = min(image.shape[1], left + side)
-        bottom = min(image.shape[0], top + side)
-        left = max(0, right - side)
-        top = max(0, bottom - side)
-        crop = image[top:bottom, left:right]
-        if crop.size == 0:
-            raise BenchmarkError("Bundled reference detector produced an empty face crop.")
-        aligned = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
-        return self._recognizer.feature(aligned)
+        return self._center_crop_feature(image)
 
     def _center_crop_feature(self, image: Any) -> Any:
         image_height, image_width = image.shape[:2]
@@ -103,7 +90,11 @@ class SFaceReference:
             (112, 112),
             interpolation=self._cv2.INTER_AREA,
         )
-        return self._recognizer.feature(aligned)
+        return self._owned_feature(aligned)
+
+    def _owned_feature(self, aligned: Any) -> Any:
+        feature = self._recognizer.feature(aligned)
+        return feature.copy() if hasattr(feature, "copy") else feature
 
     def score(self, first_feature: Any, second_feature: Any) -> float:
         return float(

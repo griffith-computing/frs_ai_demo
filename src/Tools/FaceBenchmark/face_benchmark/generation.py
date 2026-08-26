@@ -458,9 +458,12 @@ def _select_candidate(
         )
     best_error = abs(best[3] - target)
     if best_error > tolerance:
+        minimum = min(candidate[3] for candidate in available)
+        maximum = max(candidate[3] for candidate in available)
         raise BenchmarkError(
             f"Identity '{identity.identity_id}' could not reach target {target} within "
-            f"±{tolerance} points; closest candidate was {best[3]:.2f}."
+            f"±{tolerance} points; closest candidate was {best[3]:.2f} and the "
+            f"available range was {minimum:.2f}–{maximum:.2f}."
         )
     return best
 

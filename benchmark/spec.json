@@ -1,6 +1,6 @@
 {
   "$schema": "./schemas/spec.schema.json",
-  "benchmarkVersion": "1.4.0",
+  "benchmarkVersion": "1.4.2",
   "name": "FRS Synthetic Face Verification Benchmark",
   "tolerancePercentagePoints": 5.0,
   "targets": [95, 90, 85, 80, 75, 70, 65, 60, 55],
