@@ -1,6 +1,6 @@
 {
   "$schema": "./schemas/spec.schema.json",
-  "benchmarkVersion": "1.1.0",
+  "benchmarkVersion": "1.2.0",
   "name": "FRS Synthetic Face Verification Benchmark",
   "tolerancePercentagePoints": 5.0,
   "targets": [95, 90, 85, 80, 75, 70, 65, 60, 55],
@@ -39,18 +39,17 @@
     { "identityId": "calibration-010", "seed": 21010 }
   ],
   "generator": {
-    "name": "FLUX.1-schnell",
+    "name": "Stable Diffusion XL Base 1.0",
     "provider": "Hugging Face Diffusers",
-    "repository": "https://huggingface.co/black-forest-labs/FLUX.1-schnell",
-    "modelId": "black-forest-labs/FLUX.1-schnell",
-    "revision": "741f7c3ce8b383c54771c7003378a50191e9efe9",
-    "license": "Apache-2.0",
-    "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0.txt",
-    "modelCardUrl": "https://huggingface.co/black-forest-labs/FLUX.1-schnell/blob/741f7c3ce8b383c54771c7003378a50191e9efe9/README.md",
+    "repository": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0",
+    "modelId": "stabilityai/stable-diffusion-xl-base-1.0",
+    "revision": "462165984030d82259a11f4367a4eed129e94a7b",
+    "license": "CreativeML Open RAIL++-M",
+    "licenseUrl": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/462165984030d82259a11f4367a4eed129e94a7b/LICENSE.md",
+    "modelCardUrl": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/462165984030d82259a11f4367a4eed129e94a7b/README.md",
     "integrity": "Hugging Face snapshot pinned by immutable repository commit; Hub downloads validate file ETags.",
-    "inferenceSteps": 4,
-    "guidanceScale": 0.0,
-    "maxSequenceLength": 256
+    "inferenceSteps": 30,
+    "guidanceScale": 7.0
   },
   "referenceModels": {
     "detector": {

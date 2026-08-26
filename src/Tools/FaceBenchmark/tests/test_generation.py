@@ -8,9 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from face_benchmark.contract import Identity
-from face_benchmark.errors import BenchmarkError
 from face_benchmark.generation import (
-    FluxIdentityGenerator,
+    SdxlIdentityGenerator,
     _decode_image,
     _encode_image,
     _write_image,
@@ -48,43 +47,22 @@ class _FakeGenerator:
         return self
 
 
-class _FakeTokenizer:
-    calls: list[tuple[str, dict[str, object]]] = []
-
-    @classmethod
-    def from_pretrained(cls, model_id: str, **options: object) -> object:
-        cls.calls.append((model_id, options))
-        return types.SimpleNamespace(model_id=model_id, options=options)
-
-
-class _SlowTokenizerFailure:
-    @classmethod
-    def from_pretrained(cls, model_id: str, **options: object) -> object:
-        raise ValueError(
-            "You set `add_prefix_space`. The tokenizer needs to be converted "
-            "from the slow tokenizers"
-        )
-
-
 class GenerationTests(unittest.TestCase):
-    def test_flux_generator_pins_revision_and_seed(self) -> None:
+    def test_sdxl_generator_pins_revision_and_seed(self) -> None:
         fake_torch = types.SimpleNamespace(
             cuda=types.SimpleNamespace(is_available=lambda: False),
             float32="float32",
-            bfloat16="bfloat16",
+            float16="float16",
             Generator=_FakeGenerator,
         )
-        fake_diffusers = types.SimpleNamespace(FluxPipeline=_FakePipeline)
-        fake_transformers = types.SimpleNamespace(
-            CLIPTokenizerFast=_FakeTokenizer,
-            T5TokenizerFast=_FakeTokenizer,
+        fake_diffusers = types.SimpleNamespace(
+            StableDiffusionXLPipeline=_FakePipeline
         )
         config = {
             "modelId": "owner/model",
             "revision": "immutable-revision",
-            "inferenceSteps": 4,
-            "guidanceScale": 0.0,
-            "maxSequenceLength": 256,
+            "inferenceSteps": 30,
+            "guidanceScale": 7.0,
         }
 
         with patch.dict(
@@ -92,11 +70,9 @@ class GenerationTests(unittest.TestCase):
             {
                 "torch": fake_torch,
                 "diffusers": fake_diffusers,
-                "transformers": fake_transformers,
             },
         ):
-            _FakeTokenizer.calls.clear()
-            generator = FluxIdentityGenerator(config)
+            generator = SdxlIdentityGenerator(config)
             image = generator.generate(Identity("synthetic-1", 1234))
 
         loaded_model_id, loaded_options = _FakePipeline.loaded
@@ -104,58 +80,11 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual("immutable-revision", loaded_options["revision"])
         self.assertEqual("float32", loaded_options["torch_dtype"])
         self.assertTrue(loaded_options["use_safetensors"])
-        self.assertEqual("owner/model", loaded_options["tokenizer"].model_id)
-        self.assertEqual("owner/model", loaded_options["tokenizer_2"].model_id)
-        self.assertEqual(
-            [
-                (
-                    "owner/model",
-                    {
-                        "subfolder": "tokenizer",
-                        "revision": "immutable-revision",
-                        "add_prefix_space": False,
-                    },
-                ),
-                (
-                    "owner/model",
-                    {
-                        "subfolder": "tokenizer_2",
-                        "revision": "immutable-revision",
-                    },
-                ),
-            ],
-            _FakeTokenizer.calls,
-        )
         self.assertEqual("RGB", image.mode)
         self.assertEqual(1234, generator._pipeline.call_options["generator"].seed)
-        self.assertEqual(4, generator._pipeline.call_options["num_inference_steps"])
-        self.assertEqual(0.0, generator._pipeline.call_options["guidance_scale"])
-
-    def test_slow_tokenizer_failure_has_actionable_refresh_command(self) -> None:
-        fake_torch = types.SimpleNamespace(
-            cuda=types.SimpleNamespace(is_available=lambda: False),
-            float32="float32",
-            bfloat16="bfloat16",
-        )
-        fake_transformers = types.SimpleNamespace(
-            CLIPTokenizerFast=_SlowTokenizerFailure,
-            T5TokenizerFast=_FakeTokenizer,
-        )
-        with patch.dict(
-            sys.modules,
-            {
-                "torch": fake_torch,
-                "diffusers": types.SimpleNamespace(FluxPipeline=_FakePipeline),
-                "transformers": fake_transformers,
-            },
-        ):
-            with self.assertRaisesRegex(BenchmarkError, "uv sync.*--refresh"):
-                FluxIdentityGenerator(
-                    {
-                        "modelId": "owner/model",
-                        "revision": "immutable-revision",
-                    }
-                )
+        self.assertEqual(30, generator._pipeline.call_options["num_inference_steps"])
+        self.assertEqual(7.0, generator._pipeline.call_options["guidance_scale"])
+        self.assertIn("celebrity", generator._pipeline.call_options["negative_prompt"])
 
     def test_persisted_probe_bytes_are_the_scored_pixels(self) -> None:
         try:

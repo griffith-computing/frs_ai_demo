@@ -25,12 +25,11 @@ BASE_PROMPT = (
 CALIBRATION_STRENGTHS = (0.10, 0.28, 0.46, 0.64, 0.82, 1.0)
 
 
-class FluxIdentityGenerator:
+class SdxlIdentityGenerator:
     def __init__(self, generator_config: dict[str, Any]) -> None:
         try:
             import torch
-            from diffusers import FluxPipeline
-            from transformers import CLIPTokenizerFast, T5TokenizerFast
+            from diffusers import StableDiffusionXLPipeline
         except ImportError as error:
             raise BenchmarkError(
                 "Generation support is not installed. Run 'uv sync --extra generation'."
@@ -41,54 +40,37 @@ class FluxIdentityGenerator:
             raise BenchmarkError("Generator modelId and revision are required.")
         self._torch = torch
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
-        dtype = torch.bfloat16 if self._device == "cuda" else torch.float32
-        try:
-            tokenizer = CLIPTokenizerFast.from_pretrained(
-                model_id,
-                subfolder="tokenizer",
-                revision=revision,
-                add_prefix_space=False,
-            )
-            tokenizer_2 = T5TokenizerFast.from_pretrained(
-                model_id,
-                subfolder="tokenizer_2",
-                revision=revision,
-            )
-            self._pipeline = FluxPipeline.from_pretrained(
-                model_id,
-                revision=revision,
-                torch_dtype=dtype,
-                use_safetensors=True,
-                tokenizer=tokenizer,
-                tokenizer_2=tokenizer_2,
-            )
-        except ValueError as error:
-            if "add_prefix_space" in str(error):
-                raise BenchmarkError(
-                    "FLUX requires the pinned fast tokenizer runtime. Run "
-                    "'uv sync --project src/Tools/FaceBenchmark --extra generation "
-                    "--refresh' and retry."
-                ) from error
-            raise
+        dtype = torch.float16 if self._device == "cuda" else torch.float32
+        print(
+            f"Loading {generator_config.get('name', model_id)} at revision "
+            f"{revision} on {self._device}..."
+        )
+        self._pipeline = StableDiffusionXLPipeline.from_pretrained(
+            model_id,
+            revision=revision,
+            torch_dtype=dtype,
+            use_safetensors=True,
+        )
         if self._device == "cuda":
             self._pipeline.enable_model_cpu_offload()
         else:
             self._pipeline.to(self._device)
         self._steps = int(generator_config.get("inferenceSteps", 40))
-        self._guidance = float(generator_config.get("guidanceScale", 0.0))
-        self._max_sequence_length = int(
-            generator_config.get("maxSequenceLength", 256)
-        )
+        self._guidance = float(generator_config.get("guidanceScale", 7.0))
 
     def generate(self, identity: Identity) -> Any:
         generator = self._torch.Generator("cpu").manual_seed(identity.seed)
         return self._pipeline(
             prompt=BASE_PROMPT,
+            negative_prompt=(
+                "celebrity, known person, multiple people, profile, face covered, "
+                "sunglasses, hat, text, watermark, illustration, painting, cartoon, "
+                "deformed, duplicate"
+            ),
             width=1024,
             height=1024,
             num_inference_steps=self._steps,
             guidance_scale=self._guidance,
-            max_sequence_length=self._max_sequence_length,
             generator=generator,
         ).images[0].convert("RGB")
 
@@ -111,7 +93,7 @@ def generate_library(
     reference = SFaceReference(
         reference_paths["detector"], reference_paths["recognizer"]
     )
-    generator = FluxIdentityGenerator(spec.raw["generator"])
+    generator = SdxlIdentityGenerator(spec.raw["generator"])
     artifacts: list[dict[str, Any]] = []
     enrollment_images: dict[tuple[str, str], Any] = {}
     enrollment_features: dict[tuple[str, str], Any] = {}
