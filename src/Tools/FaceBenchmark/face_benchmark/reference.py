@@ -58,19 +58,20 @@ class SFaceReference:
 
     def _haar_feature(self, image: Any) -> Any:
         cv2 = self._cv2
+        image_height, image_width = image.shape[:2]
+        minimum_face_size = max(80, min(image_width, image_height) // 6)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         faces = self._haar_detector.detectMultiScale(
             cv2.equalizeHist(gray),
             scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(80, 80),
+            minNeighbors=6,
+            minSize=(minimum_face_size, minimum_face_size),
         )
-        count = len(faces)
-        if count != 1:
-            raise BenchmarkError(
-                f"Bundled reference detector expected exactly one face but found {count}."
-            )
-        x, y, width, height = (int(value) for value in faces[0])
+        x, y, width, height = select_dominant_face(
+            [tuple(int(value) for value in face) for face in faces],
+            image_width,
+            image_height,
+        )
         side = round(max(width, height) * 1.35)
         center_x = x + width // 2
         center_y = y + height // 2
@@ -104,3 +105,56 @@ class SFaceReference:
                 "Generation support is not installed. Run 'uv sync --extra generation'."
             ) from error
         return numpy.asarray(image.convert("RGB"))
+
+
+def select_dominant_face(
+    faces: list[tuple[int, int, int, int]],
+    image_width: int,
+    image_height: int,
+) -> tuple[int, int, int, int]:
+    if not faces:
+        raise BenchmarkError("Bundled reference detector found no face.")
+
+    image_center_x = image_width / 2
+    image_center_y = image_height / 2
+    diagonal = max((image_width**2 + image_height**2) ** 0.5, 1.0)
+
+    def rank(face: tuple[int, int, int, int]) -> float:
+        x, y, width, height = face
+        center_x = x + width / 2
+        center_y = y + height / 2
+        distance = (
+            (center_x - image_center_x) ** 2
+            + (center_y - image_center_y) ** 2
+        ) ** 0.5
+        centrality = max(0.25, 1.0 - distance / diagonal)
+        return width * height * centrality
+
+    ranked = sorted(faces, key=rank, reverse=True)
+    primary = ranked[0]
+    primary_area = primary[2] * primary[3]
+    for candidate in ranked[1:]:
+        candidate_area = candidate[2] * candidate[3]
+        if (
+            candidate_area >= primary_area * 0.60
+            and _intersection_over_union(primary, candidate) < 0.20
+        ):
+            raise BenchmarkError(
+                "Bundled reference detector found multiple similarly prominent faces."
+            )
+    return primary
+
+
+def _intersection_over_union(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+) -> float:
+    first_x, first_y, first_width, first_height = first
+    second_x, second_y, second_width, second_height = second
+    left = max(first_x, second_x)
+    top = max(first_y, second_y)
+    right = min(first_x + first_width, second_x + second_width)
+    bottom = min(first_y + first_height, second_y + second_height)
+    intersection = max(0, right - left) * max(0, bottom - top)
+    union = first_width * first_height + second_width * second_height - intersection
+    return intersection / union if union else 0.0

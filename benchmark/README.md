@@ -124,12 +124,15 @@ artifact before face detection, scoring, hashing, and target selection.
 ```
 
 The face detector is OpenCV's bundled Haar cascade, so generation does not
-download a detector model. SFace remains the external reference recognizer and
-is checksum-verified after download. Generation fails if that checksum is
-wrong, an image does not contain exactly one detectable face, or a probe cannot
-reach its target within the configured tolerance. Do not manually replace,
-crop, recompress, or rename generated files; those changes invalidate the
-manifest hash and the predefined expectations.
+download a detector model. The tool consolidates overlapping detections,
+selects one unambiguous dominant central face, and deterministically retries up
+to five derived seeds when an enrollment contains multiple similarly prominent
+faces. The actual selected seed is recorded in the manifest. SFace remains the
+external reference recognizer and is checksum-verified after download.
+Generation fails if that checksum is wrong, no unambiguous face can be
+generated, or a probe cannot reach its target within the configured tolerance.
+Do not manually replace, crop, recompress, or rename generated files; those
+changes invalidate the manifest hash and the predefined expectations.
 
 Generation is seeded and versions are pinned, but GPU libraries can introduce
 platform-specific numerical variation. Archive the generated manifest with any
@@ -299,7 +302,7 @@ independently; never compare raw confidences directly.
 | Recognizer checksum mismatch | Delete the cached SFace file and retry. Do not bypass checksum validation. |
 | SFace download has an SSL error | Download `face_recognition_sface_2021dec.onnx` through an approved browser or artifact mirror and pass its path with `--recognizer-model`; its SHA-256 is still verified against `spec.json`. |
 | `MemoryError` while loading generator weights | Confirm `uv run --project src\Tools\FaceBenchmark python -c "import face_benchmark; print(face_benchmark.__version__)"` reports 1.3.0 or later, then rerun `uv sync --project src\Tools\FaceBenchmark --extra generation --refresh`. Version 1.3 uses the smaller Stable Diffusion 1.5 model with low-memory loading. Close memory-intensive applications and ensure the Windows paging file is enabled. |
-| Zero or multiple faces | Keep the failure; do not hand-edit the image. Confirm the pinned OpenCV package version. |
+| No face or multiple similarly prominent faces | Version 1.3.1 retries enrollment generation deterministically and records the successful seed. If all attempts fail, keep the failure; do not hand-edit the image. |
 | Target cannot be reached | Confirm pinned generator/reference versions and supported runtime. The run is not valid if generation only partially completes. |
 | Azure returns 401/403 | Confirm endpoint, RBAC, token tenant, and Face Limited Access approval. |
 | Azure returns 429 | The adapter retries using `Retry-After`; reduce parallel external calls if repeated throttling persists. |

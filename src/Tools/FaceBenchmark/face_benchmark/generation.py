@@ -134,10 +134,11 @@ def generate_library(
         ("evaluation", spec.evaluation_identities),
     ):
         for identity in identities:
-            generated_image = generator.generate(identity)
-            encoded = _encode_image(generated_image, "PNG")
-            image = _decode_image(encoded)
-            feature = reference.feature(image)
+            encoded, image, feature, generator_seed = _generate_enrollment(
+                generator,
+                reference,
+                identity,
+            )
             path = _write_image(
                 encoded,
                 output_directory,
@@ -157,7 +158,7 @@ def generate_library(
                     output_directory=output_directory,
                     target=None,
                     reference_percentage=100.0,
-                    parameters={"generatorSeed": identity.seed},
+                    parameters={"generatorSeed": generator_seed},
                 )
             )
 
@@ -271,6 +272,34 @@ def generate_library(
     manifest_path = output_directory / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest_path
+
+
+def _generate_enrollment(
+    generator: StableDiffusionIdentityGenerator,
+    reference: SFaceReference,
+    identity: Identity,
+    maximum_attempts: int = 5,
+) -> tuple[bytes, Any, Any, int]:
+    last_error: BenchmarkError | None = None
+    for attempt in range(maximum_attempts):
+        generator_seed = identity.seed + attempt * 1_000_003
+        generated_image = generator.generate(
+            Identity(identity.identity_id, generator_seed)
+        )
+        encoded = _encode_image(generated_image, "PNG")
+        image = _decode_image(encoded)
+        try:
+            return encoded, image, reference.feature(image), generator_seed
+        except BenchmarkError as error:
+            message = str(error).lower()
+            if "detector" not in message and "face" not in message:
+                raise
+            last_error = error
+    raise BenchmarkError(
+        f"Could not generate an unambiguous single-face enrollment for "
+        f"'{identity.identity_id}' after {maximum_attempts} deterministic attempts: "
+        f"{last_error}"
+    )
 
 
 def _reference_calibration_rows(

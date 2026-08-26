@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from face_benchmark.reference import SFaceReference
+from face_benchmark.errors import BenchmarkError
+from face_benchmark.reference import SFaceReference, select_dominant_face
 
 
 class _FakeCascade:
@@ -45,6 +46,36 @@ class ReferenceTests(unittest.TestCase):
                 "haarcascade_frontalface_default.xml"
             )
         )
+
+    def test_selects_dominant_central_face_over_small_false_positives(self) -> None:
+        face = select_dominant_face(
+            [
+                (300, 250, 400, 400),
+                (50, 50, 100, 100),
+                (850, 80, 90, 90),
+            ],
+            1024,
+            1024,
+        )
+
+        self.assertEqual((300, 250, 400, 400), face)
+
+    def test_overlapping_detections_are_not_treated_as_multiple_people(self) -> None:
+        face = select_dominant_face(
+            [(300, 250, 400, 400), (320, 270, 360, 360)],
+            1024,
+            1024,
+        )
+
+        self.assertEqual((300, 250, 400, 400), face)
+
+    def test_rejects_two_similarly_prominent_separate_faces(self) -> None:
+        with self.assertRaisesRegex(BenchmarkError, "multiple similarly prominent"):
+            select_dominant_face(
+                [(100, 250, 350, 350), (580, 250, 340, 340)],
+                1024,
+                1024,
+            )
 
 
 if __name__ == "__main__":

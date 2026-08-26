@@ -12,8 +12,10 @@ from face_benchmark.generation import (
     StableDiffusionIdentityGenerator,
     _decode_image,
     _encode_image,
+    _generate_enrollment,
     _write_image,
 )
+from face_benchmark.errors import BenchmarkError
 
 
 class _FakeImage:
@@ -121,6 +123,41 @@ class GenerationTests(unittest.TestCase):
                 list(scored_image.getdata()),
                 list(Image.open(root / relative_path).convert("RGB").getdata()),
             )
+
+    def test_enrollment_retries_ambiguous_generated_face_deterministically(self) -> None:
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("generation dependencies are not installed")
+
+        class Generator:
+            def __init__(self) -> None:
+                self.seeds: list[int] = []
+
+            def generate(self, identity: Identity) -> object:
+                self.seeds.append(identity.seed)
+                return Image.new("RGB", (64, 64), (120, 140, 160))
+
+        class Reference:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def feature(self, image: object) -> object:
+                self.calls += 1
+                if self.calls == 1:
+                    raise BenchmarkError(
+                        "Bundled reference detector found multiple similarly prominent faces."
+                    )
+                return "feature"
+
+        generator = Generator()
+        _, _, feature, seed = _generate_enrollment(
+            generator, Reference(), Identity("identity-1", 42)
+        )
+
+        self.assertEqual("feature", feature)
+        self.assertEqual(1_000_045, seed)
+        self.assertEqual([42, 1_000_045], generator.seeds)
 
 
 if __name__ == "__main__":
