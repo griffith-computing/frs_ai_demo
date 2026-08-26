@@ -68,8 +68,8 @@ SDK, model version, score mode, or materially different preprocessing pipeline.
 - `uv` 0.12 or later: <https://docs.astral.sh/uv/>.
 - A Python version supported by `pyproject.toml`; `uv` installs one if needed.
 - For image generation, a CUDA-capable GPU and substantial RAM/VRAM are
-  strongly recommended. SDXL is substantially smaller than the previous FLUX
-  generator but still requires several gigabytes of model storage and memory.
+  recommended. Stable Diffusion 1.5 is substantially smaller than the previous
+  generators but still requires several gigabytes of model storage and memory.
 - For Azure Face, an approved Face resource and an identity authorized to use
   detection and verification. Face verification may require Microsoft Limited
   Access approval.
@@ -97,13 +97,17 @@ the pinned fast tokenizer stack is installed:
 & $uv sync --project $tool --extra generation --refresh
 ```
 
-The pinned generator is Stability AI Stable Diffusion XL Base 1.0 under the
-CreativeML Open RAIL++-M license. It is pinned to an immutable Hugging Face
+The pinned generator is Stable Diffusion 1.5 under the CreativeML OpenRAIL-M
+license. It is pinned to an immutable Hugging Face
 repository revision; Hub downloads validate artifact ETags. Model weights are
 downloaded into a local cache and are not redistributed by this repository.
 Review the license's use restrictions before customer use. The generator's
 training dataset provenance also requires legal and privacy review in
 jurisdictions with biometric-data requirements.
+
+Stable Diffusion 1.5 generates at its native 512×512 resolution. The tool then
+uses deterministic Lanczos resampling to create the 1024×1024 benchmark
+artifact before face detection, scoring, hashing, and target selection.
 
 ## 1. Generate and validate the library
 
@@ -269,7 +273,7 @@ independently; never compare raw confidences directly.
   biological truth or a guarantee about a real person's identity.
 - Synthetic images reduce privacy risk but can accidentally resemble a real
   person. No generated portrait should be represented as an actual individual.
-- SDXL's Open RAIL++-M license permits commercial use subject to use-based
+- Stable Diffusion 1.5's OpenRAIL-M license permits commercial use subject to use-based
   restrictions. This benchmark does not assert that all generator training
   subjects consented to biometric or generative-model use.
 - Pixel transforms model framing, illumination, blur, noise, compression, and
@@ -294,7 +298,7 @@ independently; never compare raw confidences directly.
 |---|---|
 | Recognizer checksum mismatch | Delete the cached SFace file and retry. Do not bypass checksum validation. |
 | SFace download has an SSL error | Download `face_recognition_sface_2021dec.onnx` through an approved browser or artifact mirror and pass its path with `--recognizer-model`; its SHA-256 is still verified against `spec.json`. |
-| Process exits while loading components after an `add_prefix_space` warning | Confirm `uv run --project src\Tools\FaceBenchmark python -c "import face_benchmark; print(face_benchmark.__version__)"` reports 1.2.0 or later, then rerun `uv sync --project src\Tools\FaceBenchmark --extra generation --refresh`. Earlier versions loaded the much larger FLUX model and could be terminated by Windows memory pressure; 1.2 uses SDXL. |
+| `MemoryError` while loading generator weights | Confirm `uv run --project src\Tools\FaceBenchmark python -c "import face_benchmark; print(face_benchmark.__version__)"` reports 1.3.0 or later, then rerun `uv sync --project src\Tools\FaceBenchmark --extra generation --refresh`. Version 1.3 uses the smaller Stable Diffusion 1.5 model with low-memory loading. Close memory-intensive applications and ensure the Windows paging file is enabled. |
 | Zero or multiple faces | Keep the failure; do not hand-edit the image. Confirm the pinned OpenCV package version. |
 | Target cannot be reached | Confirm pinned generator/reference versions and supported runtime. The run is not valid if generation only partially completes. |
 | Azure returns 401/403 | Confirm endpoint, RBAC, token tenant, and Face Limited Access approval. |

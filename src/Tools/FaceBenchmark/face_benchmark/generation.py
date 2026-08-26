@@ -25,11 +25,11 @@ BASE_PROMPT = (
 CALIBRATION_STRENGTHS = (0.10, 0.28, 0.46, 0.64, 0.82, 1.0)
 
 
-class SdxlIdentityGenerator:
+class StableDiffusionIdentityGenerator:
     def __init__(self, generator_config: dict[str, Any]) -> None:
         try:
             import torch
-            from diffusers import StableDiffusionXLPipeline
+            from diffusers import StableDiffusionPipeline
         except ImportError as error:
             raise BenchmarkError(
                 "Generation support is not installed. Run 'uv sync --extra generation'."
@@ -45,34 +45,65 @@ class SdxlIdentityGenerator:
             f"Loading {generator_config.get('name', model_id)} at revision "
             f"{revision} on {self._device}..."
         )
-        self._pipeline = StableDiffusionXLPipeline.from_pretrained(
-            model_id,
-            revision=revision,
-            torch_dtype=dtype,
-            use_safetensors=True,
-        )
+        try:
+            self._pipeline = StableDiffusionPipeline.from_pretrained(
+                model_id,
+                revision=revision,
+                torch_dtype=dtype,
+                use_safetensors=True,
+                low_cpu_mem_usage=True,
+                safety_checker=None,
+                requires_safety_checker=False,
+            )
+        except MemoryError as error:
+            raise BenchmarkError(
+                "The image generator exceeded available host memory while loading. "
+                "Close memory-intensive applications, ensure virtual memory is enabled, "
+                "and retry. Stable Diffusion 1.5 normally requires substantially less "
+                "memory than the previous generators."
+            ) from error
         if self._device == "cuda":
             self._pipeline.enable_model_cpu_offload()
         else:
             self._pipeline.to(self._device)
         self._steps = int(generator_config.get("inferenceSteps", 40))
-        self._guidance = float(generator_config.get("guidanceScale", 7.0))
+        self._guidance = float(generator_config.get("guidanceScale", 7.5))
+        self._native_resolution = int(generator_config.get("nativeResolution", 512))
+        self._artifact_resolution = int(
+            generator_config.get("artifactResolution", 1024)
+        )
 
     def generate(self, identity: Identity) -> Any:
         generator = self._torch.Generator("cpu").manual_seed(identity.seed)
-        return self._pipeline(
+        generated = self._pipeline(
             prompt=BASE_PROMPT,
             negative_prompt=(
                 "celebrity, known person, multiple people, profile, face covered, "
                 "sunglasses, hat, text, watermark, illustration, painting, cartoon, "
                 "deformed, duplicate"
             ),
-            width=1024,
-            height=1024,
+            width=self._native_resolution,
+            height=self._native_resolution,
             num_inference_steps=self._steps,
             guidance_scale=self._guidance,
             generator=generator,
         ).images[0].convert("RGB")
+        if generated.size != (
+            self._artifact_resolution,
+            self._artifact_resolution,
+        ):
+            try:
+                from PIL import Image
+            except ImportError as error:
+                raise BenchmarkError(
+                    "Generation support is not installed. Run "
+                    "'uv sync --extra generation'."
+                ) from error
+            generated = generated.resize(
+                (self._artifact_resolution, self._artifact_resolution),
+                Image.Resampling.LANCZOS,
+            )
+        return generated
 
 
 def generate_library(
@@ -93,7 +124,7 @@ def generate_library(
     reference = SFaceReference(
         reference_paths["detector"], reference_paths["recognizer"]
     )
-    generator = SdxlIdentityGenerator(spec.raw["generator"])
+    generator = StableDiffusionIdentityGenerator(spec.raw["generator"])
     artifacts: list[dict[str, Any]] = []
     enrollment_images: dict[tuple[str, str], Any] = {}
     enrollment_features: dict[tuple[str, str], Any] = {}

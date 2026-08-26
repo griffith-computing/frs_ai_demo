@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from face_benchmark.contract import Identity
 from face_benchmark.generation import (
-    SdxlIdentityGenerator,
+    StableDiffusionIdentityGenerator,
     _decode_image,
     _encode_image,
     _write_image,
@@ -17,8 +17,15 @@ from face_benchmark.generation import (
 
 
 class _FakeImage:
+    size = (512, 512)
+
     def convert(self, mode: str) -> "_FakeImage":
         self.mode = mode
+        return self
+
+    def resize(self, size: tuple[int, int], resample: object) -> "_FakeImage":
+        self.size = size
+        self.resample = resample
         return self
 
 
@@ -48,7 +55,7 @@ class _FakeGenerator:
 
 
 class GenerationTests(unittest.TestCase):
-    def test_sdxl_generator_pins_revision_and_seed(self) -> None:
+    def test_stable_diffusion_generator_pins_revision_seed_and_resolution(self) -> None:
         fake_torch = types.SimpleNamespace(
             cuda=types.SimpleNamespace(is_available=lambda: False),
             float32="float32",
@@ -56,13 +63,15 @@ class GenerationTests(unittest.TestCase):
             Generator=_FakeGenerator,
         )
         fake_diffusers = types.SimpleNamespace(
-            StableDiffusionXLPipeline=_FakePipeline
+            StableDiffusionPipeline=_FakePipeline
         )
         config = {
             "modelId": "owner/model",
             "revision": "immutable-revision",
             "inferenceSteps": 30,
-            "guidanceScale": 7.0,
+            "guidanceScale": 7.5,
+            "nativeResolution": 512,
+            "artifactResolution": 1024,
         }
 
         with patch.dict(
@@ -72,7 +81,7 @@ class GenerationTests(unittest.TestCase):
                 "diffusers": fake_diffusers,
             },
         ):
-            generator = SdxlIdentityGenerator(config)
+            generator = StableDiffusionIdentityGenerator(config)
             image = generator.generate(Identity("synthetic-1", 1234))
 
         loaded_model_id, loaded_options = _FakePipeline.loaded
@@ -80,10 +89,16 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual("immutable-revision", loaded_options["revision"])
         self.assertEqual("float32", loaded_options["torch_dtype"])
         self.assertTrue(loaded_options["use_safetensors"])
+        self.assertTrue(loaded_options["low_cpu_mem_usage"])
+        self.assertIsNone(loaded_options["safety_checker"])
+        self.assertFalse(loaded_options["requires_safety_checker"])
         self.assertEqual("RGB", image.mode)
+        self.assertEqual((1024, 1024), image.size)
         self.assertEqual(1234, generator._pipeline.call_options["generator"].seed)
         self.assertEqual(30, generator._pipeline.call_options["num_inference_steps"])
-        self.assertEqual(7.0, generator._pipeline.call_options["guidance_scale"])
+        self.assertEqual(7.5, generator._pipeline.call_options["guidance_scale"])
+        self.assertEqual(512, generator._pipeline.call_options["width"])
+        self.assertEqual(512, generator._pipeline.call_options["height"])
         self.assertIn("celebrity", generator._pipeline.call_options["negative_prompt"])
 
     def test_persisted_probe_bytes_are_the_scored_pixels(self) -> None:
