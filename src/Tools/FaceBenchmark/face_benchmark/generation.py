@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .augmentation import augment
+from .augmentation import augment, morph
 from .calibration import fit_isotonic
 from .contract import BenchmarkSpec, Identity, sha256_file
 from .errors import BenchmarkError
@@ -224,10 +224,27 @@ def generate_library(
         print(f"Selecting evaluation targets for {identity.identity_id}...")
         enrollment = enrollment_images[("evaluation", identity.identity_id)]
         enrollment_feature = enrollment_features[("evaluation", identity.identity_id)]
+        donors = sorted(
+            (
+                (
+                    reference.score(
+                        enrollment_feature,
+                        enrollment_features[("evaluation", candidate.identity_id)],
+                    ),
+                    candidate.identity_id,
+                    enrollment_images[("evaluation", candidate.identity_id)],
+                )
+                for candidate in spec.evaluation_identities
+                if candidate.identity_id != identity.identity_id
+            ),
+            key=lambda candidate: (candidate[0], candidate[1]),
+        )
         candidates, failures = _candidate_pool(
             enrollment,
             enrollment_feature,
             identity,
+            [(donor_id, donor_image) for _, donor_id, donor_image in donors[:6]],
+            spec.targets,
             reference,
             calibration,
         )
@@ -346,17 +363,33 @@ def _candidate_pool(
     enrollment: Any,
     enrollment_feature: Any,
     identity: Identity,
+    donors: list[tuple[str, Any]],
+    targets: tuple[float, ...],
     reference: SFaceReference,
     calibration: Any,
 ) -> tuple[list[tuple[bytes, Any, Any, float, tuple[int, int]]], int]:
+    if not donors:
+        raise BenchmarkError(
+            f"Identity '{identity.identity_id}' requires at least one evaluation donor."
+        )
     candidates: list[tuple[bytes, Any, Any, float, tuple[int, int]]] = []
     failures = 0
-    for strength_index in range(1, 41):
-        strength = strength_index / 40
-        for variant in range(6):
-            key = (strength_index, variant)
-            seed = identity.seed * 10000 + strength_index * 10 + variant
-            probe, parameters = augment(enrollment, strength, seed)
+    for donor_index, (donor_identity_id, donor) in enumerate(donors):
+        donor_candidates: dict[
+            float, tuple[bytes, Any, Any, float, tuple[int, int]]
+        ] = {}
+
+        def evaluate(fraction: float) -> None:
+            nonlocal failures
+            fraction = round(fraction, 9)
+            if fraction in donor_candidates:
+                return
+            probe, parameters = morph(
+                enrollment,
+                donor,
+                fraction,
+                donor_identity_id,
+            )
             encoded = _encode_image(probe, "JPEG")
             persisted_probe = _decode_image(encoded)
             try:
@@ -366,11 +399,45 @@ def _candidate_pool(
                 )
             except BenchmarkError:
                 failures += 1
-                continue
+                return
             normalized = calibration.normalize(
                 reference.score(enrollment_feature, feature)
             )
-            candidates.append((encoded, feature, parameters, normalized, key))
+            key = (round(fraction * 1_000_000_000), donor_index)
+            donor_candidates[fraction] = (
+                encoded,
+                feature,
+                parameters,
+                normalized,
+                key,
+            )
+
+        for grid_index in range(21):
+            evaluate(grid_index / 20)
+
+        for target in targets:
+            for _ in range(8):
+                ordered = sorted(donor_candidates.items())
+                bracket = next(
+                    (
+                        (left_fraction, right_fraction)
+                        for (left_fraction, left), (right_fraction, right) in zip(
+                            ordered, ordered[1:]
+                        )
+                        if (left[3] - target) * (right[3] - target) <= 0
+                    ),
+                    None,
+                )
+                if bracket is None:
+                    break
+                left_fraction, right_fraction = bracket
+                midpoint = (left_fraction + right_fraction) / 2
+                before = len(donor_candidates)
+                evaluate(midpoint)
+                if len(donor_candidates) == before:
+                    break
+
+        candidates.extend(donor_candidates.values())
     return candidates, failures
 
 

@@ -10,6 +10,7 @@ from unittest.mock import patch
 from face_benchmark.contract import Identity
 from face_benchmark.generation import (
     StableDiffusionIdentityGenerator,
+    _candidate_pool,
     _decode_image,
     _encode_image,
     _generate_enrollment,
@@ -158,6 +159,58 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual("feature", feature)
         self.assertEqual(1_000_045, seed)
         self.assertEqual([42, 1_000_045], generator.seeds)
+
+    def test_candidate_pool_spans_genuine_to_donor_scores(self) -> None:
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("generation dependencies are not installed")
+
+        class Reference:
+            @staticmethod
+            def feature(image: object, allow_center_fallback: bool = False) -> float:
+                return image.getpixel((0, 0))[0] / 255
+
+            @staticmethod
+            def score(enrollment_feature: float, feature: float) -> float:
+                return feature
+
+        class Calibration:
+            @staticmethod
+            def normalize(score: float) -> float:
+                return score * 100
+
+        source = Image.new("RGB", (8, 8), (0, 0, 0))
+        donor = Image.new("RGB", (8, 8), (255, 255, 255))
+        candidates, failures = _candidate_pool(
+            source,
+            0.0,
+            Identity("identity-1", 42),
+            [("identity-2", donor)],
+            (95.0, 75.0, 55.0),
+            Reference(),
+            Calibration(),
+        )
+
+        self.assertEqual(0, failures)
+        scores = [candidate[3] for candidate in candidates]
+        self.assertGreater(len(candidates), 21)
+        self.assertEqual(0.0, min(scores))
+        self.assertEqual(100.0, max(scores))
+        for target in (95.0, 75.0, 55.0):
+            self.assertLess(min(abs(score - target) for score in scores), 0.5)
+        donor_endpoint = next(
+            candidate
+            for candidate in candidates
+            if candidate[2].morph_fraction == 1.0
+        )
+        self.assertEqual(
+            {
+                "morph_fraction": 1.0,
+                "donor_identity_id": "identity-2",
+            },
+            donor_endpoint[2].to_dict(),
+        )
 
 
 if __name__ == "__main__":

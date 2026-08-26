@@ -24,6 +24,15 @@ class AugmentationParameters:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class MorphParameters:
+    morph_fraction: float
+    donor_identity_id: str
+
+    def to_dict(self) -> dict[str, float | str]:
+        return asdict(self)
+
+
 def augment(image: Any, strength: float, seed: int) -> tuple[Any, AugmentationParameters]:
     try:
         import numpy
@@ -104,3 +113,31 @@ def augment(image: Any, strength: float, seed: int) -> tuple[Any, AugmentationPa
     )
     encoded.seek(0)
     return Image.open(encoded).convert("RGB"), parameters
+
+
+def morph(
+    image: Any,
+    donor: Any,
+    fraction: float,
+    donor_identity_id: str,
+) -> tuple[Any, MorphParameters]:
+    try:
+        from PIL import Image
+    except ImportError as error:
+        raise BenchmarkError(
+            "Generation support is not installed. Run 'uv sync --extra generation'."
+        ) from error
+    if not 0 <= fraction <= 1:
+        raise BenchmarkError("Morph fraction must be between 0 and 1.")
+
+    source = image.convert("RGB")
+    donor_image = donor.convert("RGB")
+    if donor_image.size != source.size:
+        donor_image = donor_image.resize(source.size, Image.Resampling.LANCZOS)
+    return (
+        Image.blend(source, donor_image, fraction),
+        MorphParameters(
+            morph_fraction=fraction,
+            donor_identity_id=donor_identity_id,
+        ),
+    )
