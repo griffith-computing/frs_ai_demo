@@ -10,7 +10,9 @@ from .errors import BenchmarkError
 
 
 def ensure_reference_models(
-    reference_models: dict[str, Any], model_directory: Path
+    reference_models: dict[str, Any],
+    model_directory: Path,
+    local_overrides: dict[str, Path] | None = None,
 ) -> dict[str, Path | None]:
     model_root = model_directory.resolve()
     model_root.mkdir(parents=True, exist_ok=True)
@@ -26,16 +28,31 @@ def ensure_reference_models(
                 )
             result[role] = None
             continue
-        url = model.get("url")
         expected_hash = model.get("sha256")
-        if not isinstance(url, str) or not url.startswith("https://"):
-            raise BenchmarkError(f"Reference model '{role}' requires an HTTPS URL.")
         if (
             not isinstance(expected_hash, str)
             or len(expected_hash) != 64
             or any(character not in "0123456789abcdef" for character in expected_hash.lower())
         ):
             raise BenchmarkError(f"Reference model '{role}' has an invalid SHA-256.")
+        override = (local_overrides or {}).get(role)
+        if override is not None:
+            override_path = override.resolve()
+            if not override_path.is_file():
+                raise BenchmarkError(
+                    f"Local reference model '{role}' was not found at '{override_path}'."
+                )
+            actual_hash = _sha256(override_path)
+            if actual_hash != expected_hash.lower():
+                raise BenchmarkError(
+                    f"Local reference model '{role}' checksum mismatch: "
+                    f"expected {expected_hash.lower()}, got {actual_hash}."
+                )
+            result[role] = override_path
+            continue
+        url = model.get("url")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            raise BenchmarkError(f"Reference model '{role}' requires an HTTPS URL.")
         filename = model.get("filename") or url.rsplit("/", 1)[-1]
         if (
             not isinstance(filename, str)
@@ -64,7 +81,15 @@ def ensure_reference_models(
         except (OSError, urllib.error.URLError) as error:
             if path.exists():
                 path.unlink()
-            raise BenchmarkError(f"Failed to download reference model '{role}': {error}") from error
+            guidance = (
+                " Download the pinned file through an approved channel and pass "
+                "'--recognizer-model <path>' to avoid Python TLS."
+                if role == "recognizer"
+                else ""
+            )
+            raise BenchmarkError(
+                f"Failed to download reference model '{role}': {error}.{guidance}"
+            ) from error
         actual_hash = _sha256(path)
         if actual_hash != expected_hash.lower():
             path.unlink()

@@ -123,6 +123,25 @@ Generation is seeded and versions are pinned, but GPU libraries can introduce
 platform-specific numerical variation. Archive the generated manifest with any
 customer test so drift is detectable.
 
+### SSL-restricted environments
+
+If Python cannot validate your corporate TLS issuer, download the pinned SFace
+file through an approved browser, internal artifact mirror, or IT-managed
+transfer. The authoritative URL and SHA-256 are under
+`referenceModels.recognizer` in `spec.json`. Then pass the file explicitly:
+
+```powershell
+& $uv run --project $tool face-benchmark generate `
+  --spec benchmark\spec.json `
+  --output benchmark\generated `
+  --model-directory .cache\face-benchmark\models `
+  --recognizer-model C:\approved-models\face_recognition_sface_2021dec.onnx
+```
+
+The local file must match the SHA-256 in `spec.json`; the tool rejects any other
+file. This bypasses only the HTTPS download, not integrity validation. Do not
+use `--insecure`, disable certificate checks, or add an untrusted CA.
+
 ## 2. Run a customer SDK
 
 Use the pairs in `benchmark\generated\manifest.json`. For each pair:
@@ -266,7 +285,7 @@ independently; never compare raw confidences directly.
 | Symptom | Action |
 |---|---|
 | Recognizer checksum mismatch | Delete the cached SFace file and retry. Do not bypass checksum validation. |
-| SFace download has an SSL error | Download `face_recognition_sface_2021dec.onnx` through an approved browser or artifact mirror, place it in `.cache\face-benchmark\models`, and rerun; its SHA-256 is still verified against `spec.json`. |
+| SFace download has an SSL error | Download `face_recognition_sface_2021dec.onnx` through an approved browser or artifact mirror and pass its path with `--recognizer-model`; its SHA-256 is still verified against `spec.json`. |
 | Zero or multiple faces | Keep the failure; do not hand-edit the image. Confirm the pinned OpenCV package version. |
 | Target cannot be reached | Confirm pinned generator/reference versions and supported runtime. The run is not valid if generation only partially completes. |
 | Azure returns 401/403 | Confirm endpoint, RBAC, token tenant, and Face Limited Access approval. |

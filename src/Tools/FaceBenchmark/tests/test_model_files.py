@@ -34,6 +34,50 @@ class ModelFileTests(unittest.TestCase):
             self.assertIsNone(paths["detector"])
             self.assertEqual(recognizer.resolve(), paths["recognizer"])
 
+    def test_local_recognizer_override_bypasses_download_and_checks_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            recognizer = root / "approved-recognizer.onnx"
+            recognizer.write_bytes(b"approved recognizer")
+            models = {
+                "detector": {"source": "opencv-package"},
+                "recognizer": {
+                    "url": "https://invalid.test/recognizer.onnx",
+                    "sha256": hashlib.sha256(b"approved recognizer").hexdigest(),
+                    "filename": "recognizer.onnx",
+                },
+            }
+
+            paths = ensure_reference_models(
+                models,
+                root / "models",
+                {"recognizer": recognizer},
+            )
+
+            self.assertEqual(recognizer.resolve(), paths["recognizer"])
+            self.assertFalse((root / "models" / "recognizer.onnx").exists())
+
+    def test_local_recognizer_override_rejects_wrong_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            recognizer = root / "recognizer.onnx"
+            recognizer.write_bytes(b"wrong file")
+            models = {
+                "detector": {"source": "opencv-package"},
+                "recognizer": {
+                    "url": "https://example.test/recognizer.onnx",
+                    "sha256": "a" * 64,
+                    "filename": "recognizer.onnx",
+                },
+            }
+
+            with self.assertRaisesRegex(BenchmarkError, "checksum mismatch"):
+                ensure_reference_models(
+                    models,
+                    root / "models",
+                    {"recognizer": recognizer},
+                )
+
     def test_rejects_filename_outside_model_directory_without_deleting_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

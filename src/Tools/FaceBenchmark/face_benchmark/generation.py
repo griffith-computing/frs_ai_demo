@@ -74,9 +74,17 @@ def generate_library(
     spec: BenchmarkSpec,
     output_directory: Path,
     model_directory: Path,
+    recognizer_model: Path | None = None,
 ) -> Path:
     output_directory.mkdir(parents=True, exist_ok=True)
-    reference_paths = ensure_reference_models(spec.raw["referenceModels"], model_directory)
+    local_overrides = (
+        {"recognizer": recognizer_model} if recognizer_model is not None else None
+    )
+    reference_paths = ensure_reference_models(
+        spec.raw["referenceModels"],
+        model_directory,
+        local_overrides,
+    )
     reference = SFaceReference(
         reference_paths["detector"], reference_paths["recognizer"]
     )

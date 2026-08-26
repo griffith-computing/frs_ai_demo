@@ -49,7 +49,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "generate":
             spec = load_spec(args.spec)
-            manifest = generate_library(spec, args.output, args.model_directory)
+            manifest = generate_library(
+                spec,
+                args.output,
+                args.model_directory,
+                args.recognizer_model,
+            )
             print(f"Generated benchmark manifest at {manifest}.")
             return 0
         parser.error(f"Unknown command '{args.command}'.")
@@ -121,6 +126,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     generate_parser.add_argument(
         "--model-directory", type=Path, default=Path(".cache/face-benchmark/models")
+    )
+    generate_parser.add_argument(
+        "--recognizer-model",
+        type=Path,
+        help="Local SFace ONNX file; bypasses download and is SHA-256 verified.",
     )
     return parser
 
