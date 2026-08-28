@@ -31,8 +31,8 @@ class AugmentationTests(unittest.TestCase):
 
     def test_augmentation_rejects_invalid_strength(self) -> None:
         from PIL import Image
-
-        with self.assertRaisesRegex(Exception, "between 0 and 1"):
+        from face_benchmark.errors import BenchmarkError
+        with self.assertRaisesRegex(BenchmarkError, "between 0 and 1"):
             augment(Image.new("RGB", (32, 32)), 1.1, 1)
 
 
