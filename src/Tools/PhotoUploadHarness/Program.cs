@@ -11,6 +11,18 @@ var configuration = new ConfigurationBuilder()
 var options = new HarnessOptions();
 configuration.Bind(options);
 
+if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _))
+{
+    Console.Error.WriteLine($"BaseUrl '{options.BaseUrl}' is not a valid absolute URL.");
+    return 1;
+}
+
+if (options.RequiresEntraAuthentication && string.IsNullOrWhiteSpace(options.EntraClientId))
+{
+    Console.Error.WriteLine("EntraClientId is required when BaseUrl targets a non-local Function App.");
+    return 1;
+}
+
 if (string.IsNullOrWhiteSpace(options.FolderPath) || !Directory.Exists(options.FolderPath))
 {
     Console.Error.WriteLine($"FolderPath '{options.FolderPath}' was not found. Set it in appsettings.json or pass --FolderPath=<path>.");

@@ -49,7 +49,14 @@ param dynamicPersonGroupId string = 'frs-ai-demo-group'
 @description('Resource ID of the VNet subnet (delegated to Microsoft.Web/serverFarms) used for outbound VNet integration.')
 param integrationSubnetId string
 
+@description('Microsoft Entra tenant ID whose identities may call the HTTP functions.')
+param entraTenantId string
+
+@description('Client ID of the Microsoft Entra application registration representing this Function API.')
+param uploadApiClientId string
+
 var hostingPlanName = '${functionAppName}-plan'
+var uploadApiAudience = 'api://${uploadApiClientId}'
 
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: hostingPlanName
@@ -179,6 +186,43 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: dynamicPersonGroupId
         }
       ]
+    }
+  }
+}
+
+resource functionAppAuth 'Microsoft.Web/sites/config@2023-01-01' = {
+  parent: functionApp
+  name: 'authsettingsV2'
+  properties: {
+    platform: {
+      enabled: true
+      runtimeVersion: '~1'
+    }
+    globalValidation: {
+      requireAuthentication: true
+      unauthenticatedClientAction: 'Return401'
+    }
+    identityProviders: {
+      azureActiveDirectory: {
+        enabled: true
+        registration: {
+          clientId: uploadApiClientId
+          openIdIssuer: '${environment().authentication.loginEndpoint}${entraTenantId}/v2.0'
+        }
+        validation: {
+          allowedAudiences: [
+            uploadApiAudience
+          ]
+        }
+      }
+    }
+    login: {
+      tokenStore: {
+        enabled: false
+      }
+    }
+    httpSettings: {
+      requireHttps: true
     }
   }
 }

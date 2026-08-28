@@ -4,7 +4,7 @@ namespace FrsAiDemo.PhotoUploadHarness;
 public sealed class HarnessOptions
 {
     public string BaseUrl { get; set; } = "http://localhost:7071/api/photos";
-    public string FunctionKey { get; set; } = string.Empty;
+    public string EntraClientId { get; set; } = string.Empty;
     public string FolderPath { get; set; } = string.Empty;
 
     /// <summary>"batch" (upload every file once) or "continuous" (loop with a delay, simulating a camera feed).</summary>
@@ -21,6 +21,9 @@ public sealed class HarnessOptions
     public CosmosOptions Cosmos { get; set; } = new();
 
     public bool IsContinuous => string.Equals(Mode, "continuous", StringComparison.OrdinalIgnoreCase);
+
+    public bool RequiresEntraAuthentication =>
+        Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri) && !uri.IsLoopback;
 }
 
 public sealed class CosmosOptions

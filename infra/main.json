@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "6740785883633794891"
+      "templateHash": "9996136029398355519"
     }
   },
   "parameters": {
@@ -49,6 +49,12 @@
       "type": "securestring",
       "metadata": {
         "description": "Client secret of the Microsoft Entra web application registration."
+      }
+    },
+    "uploadApiClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client ID of the single-tenant Microsoft Entra application registration that represents the upload Function API."
       }
     }
   },
@@ -1531,6 +1537,12 @@
           },
           "integrationSubnetId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'networkDeploy'), '2025-04-01').outputs.integrationSubnetId.value]"
+          },
+          "entraTenantId": {
+            "value": "[parameters('entraTenantId')]"
+          },
+          "uploadApiClientId": {
+            "value": "[parameters('uploadApiClientId')]"
           }
         },
         "template": {
@@ -1540,7 +1552,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "16594501055127113582"
+              "templateHash": "6113143250857374932"
             }
           },
           "parameters": {
@@ -1647,10 +1659,23 @@
               "metadata": {
                 "description": "Resource ID of the VNet subnet (delegated to Microsoft.Web/serverFarms) used for outbound VNet integration."
               }
+            },
+            "entraTenantId": {
+              "type": "string",
+              "metadata": {
+                "description": "Microsoft Entra tenant ID whose identities may call the HTTP functions."
+              }
+            },
+            "uploadApiClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Client ID of the Microsoft Entra application registration representing this Function API."
+              }
             }
           },
           "variables": {
-            "hostingPlanName": "[format('{0}-plan', parameters('functionAppName'))]"
+            "hostingPlanName": "[format('{0}-plan', parameters('functionAppName'))]",
+            "uploadApiAudience": "[format('api://{0}', parameters('uploadApiClientId'))]"
           },
           "resources": [
             {
@@ -1777,6 +1802,46 @@
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('functionAppName'), 'authsettingsV2')]",
+              "properties": {
+                "platform": {
+                  "enabled": true,
+                  "runtimeVersion": "~1"
+                },
+                "globalValidation": {
+                  "requireAuthentication": true,
+                  "unauthenticatedClientAction": "Return401"
+                },
+                "identityProviders": {
+                  "azureActiveDirectory": {
+                    "enabled": true,
+                    "registration": {
+                      "clientId": "[parameters('uploadApiClientId')]",
+                      "openIdIssuer": "[format('{0}{1}/v2.0', environment().authentication.loginEndpoint, parameters('entraTenantId'))]"
+                    },
+                    "validation": {
+                      "allowedAudiences": [
+                        "[variables('uploadApiAudience')]"
+                      ]
+                    }
+                  }
+                },
+                "login": {
+                  "tokenStore": {
+                    "enabled": false
+                  }
+                },
+                "httpSettings": {
+                  "requireHttps": true
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
               ]
             }
           ],
