@@ -10,6 +10,18 @@ local.settings*.json
 ## PhotoUploadHarness local settings (may contain a function key - never commit)
 src/Tools/PhotoUploadHarness/appsettings.json
 
+## Face benchmark generated artifacts and local Python environment
+src/Tools/FaceBenchmark/.venv/
+src/Tools/FaceBenchmark/__pycache__/
+src/Tools/FaceBenchmark/**/__pycache__/
+benchmark/generated/
+benchmark/reports/
+.cache/face-benchmark/
+*.onnx
+*.safetensors
+*.ckpt
+*.pkl
+
 ## Azurite local storage emulator data
 .azurite/
 __azurite_db_*.json

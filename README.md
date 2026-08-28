@@ -357,6 +357,20 @@ is different: Cosmos DB has public network access disabled, so direct
 verification still requires VPN/ExpressRoute or execution inside the VNet, plus
 Cosmos data-plane permissions for the signed-in identity.
 
+## Synthetic face SDK benchmark
+
+`src/Tools/FaceBenchmark` generates a versioned synthetic face-verification
+library and evaluates Azure Face or vendor-neutral CSV results. The evaluation
+set contains 20 identities with one enrollment image and probes targeting
+normalized match levels from 95% to 55%. Reserved identities calibrate each
+SDK's raw score scale before held-out evaluation.
+
+See [`benchmark/README.md`](benchmark/README.md) for the customer-facing test
+protocol, metric definitions, generation and Azure commands, CSV contract,
+pass criteria, limitations, and result-submission checklist. Generated images,
+model weights, calibration files, and reports are local artifacts and are not
+committed.
+
 ## Reviewer web app
 
 The .NET 10 Razor Pages app in `src/WebApp` requires single-tenant Microsoft
@@ -502,6 +516,10 @@ dotnet build
 # Photo upload harness
 cd src/Tools/PhotoUploadHarness
 dotnet build
+
+# Synthetic face benchmark
+uv sync --project src/Tools/FaceBenchmark
+uv run --project src/Tools/FaceBenchmark python -m unittest discover -s src/Tools/FaceBenchmark/tests -t src/Tools/FaceBenchmark -v
 
 # Complete mixed-target solution and tests (.NET 10 SDK)
 dotnet build FrsAiDemo.slnx

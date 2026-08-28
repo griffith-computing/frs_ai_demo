@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/griffith-computing/frs_ai_demo/benchmark/schemas/report.schema.json",
+  "title": "Face benchmark evaluation report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "benchmarkVersion",
+    "generatedAtUtc",
+    "sdk",
+    "modelVersion",
+    "tolerancePercentagePoints",
+    "calibration",
+    "metrics",
+    "results"
+  ],
+  "properties": {
+    "benchmarkVersion": { "type": "string" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "sdk": { "type": "string" },
+    "modelVersion": { "type": "string" },
+    "tolerancePercentagePoints": { "type": "number" },
+    "calibration": { "type": "object" },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "meanAbsolutePercentageError",
+        "withinToleranceRate",
+        "identityAccuracy",
+        "rocAuc",
+        "falseAcceptRate",
+        "falseRejectRate"
+      ]
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pairId", "rawScore", "normalizedPercentage", "sameIdentity"]
+      }
+    }
+  }
+}

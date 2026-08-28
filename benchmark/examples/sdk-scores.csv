@@ -1,0 +1,5 @@
+pair_id,split,enrollment_image_id,probe_image_id,same_identity,target_percentage,raw_score
+calibration-genuine-001,calibration,calibration-001-enrollment,calibration-001-probe-001,true,,0.91
+calibration-impostor-001,calibration,calibration-001-enrollment,calibration-002-enrollment,false,,0.12
+evaluation-genuine-001,evaluation,synthetic-001-enrollment,synthetic-001-probe-095,true,95,0.89
+evaluation-impostor-001,evaluation,synthetic-001-enrollment,synthetic-002-enrollment,false,,0.10

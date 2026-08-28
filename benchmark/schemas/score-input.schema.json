@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/griffith-computing/frs_ai_demo/benchmark/schemas/score-input.schema.json",
+  "title": "Raw SDK score input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sdk", "modelVersion", "scoreDirection", "pairs"],
+  "properties": {
+    "sdk": { "type": "string", "minLength": 1 },
+    "modelVersion": { "type": "string", "minLength": 1 },
+    "scoreDirection": { "enum": ["higher-is-match", "lower-is-match"] },
+    "pairs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "allOf": [
+          { "$ref": "#/$defs/pair" },
+          { "required": ["rawScore"] }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairId",
+        "split",
+        "enrollmentImageId",
+        "probeImageId",
+        "sameIdentity"
+      ],
+      "properties": {
+        "pairId": { "type": "string", "minLength": 1 },
+        "split": { "enum": ["calibration", "evaluation"] },
+        "enrollmentImageId": { "type": "string", "minLength": 1 },
+        "probeImageId": { "type": "string", "minLength": 1 },
+        "sameIdentity": { "type": "boolean" },
+        "targetPercentage": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "rawScore": { "type": "number" }
+      }
+    }
+  }
+}
