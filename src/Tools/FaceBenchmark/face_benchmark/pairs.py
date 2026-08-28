@@ -14,6 +14,8 @@ def build_pairs(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         identity_id = artifact.get("identityId")
         role = artifact.get("role")
         image_id = artifact.get("imageId")
+        if not isinstance(image_id, str) or not image_id:
+            raise BenchmarkError("Artifact is missing a non-empty imageId.")
         if split not in {"calibration", "evaluation"}:
             raise BenchmarkError(f"Artifact '{image_id}' has invalid split '{split}'.")
         if not isinstance(identity_id, str) or not identity_id:
