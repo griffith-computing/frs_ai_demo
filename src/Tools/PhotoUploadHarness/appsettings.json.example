@@ -1,6 +1,6 @@
 {
   "BaseUrl": "http://localhost:7071/api/photos",
-  "FunctionKey": "",
+  "EntraClientId": "",
   "FolderPath": "C:\\path\\to\\photos",
   "Mode": "batch",
   "IntervalSeconds": 5,

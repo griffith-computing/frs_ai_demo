@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Azure.Core;
+using Azure.Identity;
 
 namespace FrsAiDemo.PhotoUploadHarness;
 
@@ -28,11 +30,27 @@ public sealed class PhotoUploaderClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly HarnessOptions _options;
+    private readonly TokenCredential? _credential;
 
-    public PhotoUploaderClient(HttpClient httpClient, HarnessOptions options)
+    public PhotoUploaderClient(HttpClient httpClient, HarnessOptions options, TokenCredential? credential = null)
     {
+        if (options.RequiresEntraAuthentication && string.IsNullOrWhiteSpace(options.EntraClientId))
+        {
+            throw new ArgumentException(
+                "EntraClientId is required for a non-local upload endpoint.",
+                nameof(options));
+        }
+
         _httpClient = httpClient;
         _options = options;
+        _credential = credential ?? (options.RequiresEntraAuthentication
+            ? new DefaultAzureCredential(new DefaultAzureCredentialOptions
+            {
+                ExcludeEnvironmentCredential = true,
+                ExcludeWorkloadIdentityCredential = true,
+                ExcludeManagedIdentityCredential = true
+            })
+            : null);
     }
 
     public async Task<UploadResult> UploadAsync(FileInfo file, CancellationToken cancellationToken)
@@ -44,20 +62,25 @@ public sealed class PhotoUploaderClient
             _ => "application/octet-stream"
         };
 
-        var requestUri = _options.BaseUrl;
-        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
-        {
-            var separator = requestUri.Contains('?') ? '&' : '?';
-            requestUri = $"{requestUri}{separator}code={Uri.EscapeDataString(_options.FunctionKey)}";
-        }
-
         try
         {
             await using var stream = file.OpenRead();
             using var content = new StreamContent(stream);
             content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl)
+            {
+                Content = content
+            };
 
-            using var response = await _httpClient.PostAsync(requestUri, content, cancellationToken);
+            if (_options.RequiresEntraAuthentication)
+            {
+                var token = await _credential!.GetTokenAsync(
+                    new TokenRequestContext([$"api://{_options.EntraClientId}/.default"]),
+                    cancellationToken);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+            }
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)

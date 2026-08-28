@@ -19,6 +19,9 @@ param entraClientId string
 @description('Client secret of the Microsoft Entra web application registration.')
 param entraClientSecret string
 
+@description('Client ID of the single-tenant Microsoft Entra application registration that represents the upload Function API.')
+param uploadApiClientId string
+
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}st${suffix}')
 var eventHubNamespaceName = '${namePrefix}-ehns-${suffix}'
@@ -137,6 +140,8 @@ module functionApp 'modules/functionapp.bicep' = {
     faceApiEndpoint: face.outputs.faceEndpoint
     dynamicPersonGroupId: dynamicPersonGroupId
     integrationSubnetId: network.outputs.integrationSubnetId
+    entraTenantId: entraTenantId
+    uploadApiClientId: uploadApiClientId
   }
   dependsOn: [
     privateEndpoints

@@ -36,7 +36,7 @@ public sealed class UploadPhotoFunction
 
     [Function("UploadPhotoFunction")]
     public async Task<UploadPhotoOutput> RunAsync(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "photos")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "photos")] HttpRequestData req,
         FunctionContext executionContext)
     {
         var logger = executionContext.GetLogger<UploadPhotoFunction>();

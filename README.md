@@ -60,7 +60,9 @@ recognition history).
 ## Networking
 
 The Function App still receives **inbound** traffic over the public
-internet (the `UploadPhotoFunction` HTTP endpoint), but all of its
+internet (the `UploadPhotoFunction` HTTP endpoint). App Service Authentication
+validates a single-tenant Microsoft Entra bearer token before forwarding an
+upload request to the function. All of the Function App's
 **outbound** calls to Storage, Cosmos DB, Event Hub, and the Face API go
 over **private networking** instead of the public internet:
 
@@ -106,7 +108,7 @@ to it.
 ## Components
 
 | Component | Purpose |
-|---|---|
+| --- | --- |
 | **Blob Storage** (`photos` container) | Stores uploaded photo files. |
 | **Event Hub** (`photo-events`) | Carries lightweight upload events (blob URL + metadata) from the upload function to the processing function. |
 | **Function App** (.NET 10 isolated) | `UploadPhotoFunction` (HTTP trigger) + `ProcessPhotoFunction` (Event Hub trigger). |
@@ -167,13 +169,37 @@ pipeline, so it requires the Microsoft Entra app-registration values from
 secure value at deploy time (or via `entraClientSecret` in Key Vault reference).
 
 | Parameter | Required | Default | Purpose |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `namePrefix` | No | `frsaidemo` | Prefix used to derive all resource names (3–12 lowercase alphanumeric chars). |
 | `location` | No | resource group location | Azure region for all resources. |
 | `dynamicPersonGroupId` | No | `frs-ai-demo-group` | Face API Dynamic Person Group id used for no-training identification. |
 | `entraTenantId` | No | deployment tenant | Microsoft Entra tenant ID for reviewer sign-in. |
 | `entraClientId` | **Yes** | — | Client ID of the reviewer web app's Entra registration. |
 | `entraClientSecret` | **Yes** (`@secure`) | — | Client secret of the Entra registration. Supply at deploy time; never commit it. |
+| `uploadApiClientId` | **Yes** | — | Client ID of the dedicated Entra app registration representing the upload Function API. |
+
+### Upload API Microsoft Entra setup
+
+Create a separate, single-tenant app registration for the upload Function API.
+This registration is independent of the reviewer web app registration and does
+not change the web app's sign-in or `Reviewer` role:
+
+1. In **Microsoft Entra ID > App registrations**, create a single-tenant
+   registration such as `frs-ai-demo-upload-api`.
+2. Under **Expose an API**, set the Application ID URI to
+   `api://<upload-api-client-id>`.
+3. Add a delegated scope named `Photos.Upload`, with users and admins allowed
+   to consent.
+4. Under **Authorized client applications**, add the Azure CLI application ID
+   `04b07795-8ddb-461a-bbee-02f9e1bf7b46` and authorize `Photos.Upload`. This
+   allows signed-in Azure CLI users in the tenant to obtain an upload API token
+   without a separate client secret.
+
+The Function App's Easy Auth configuration validates both the tenant issuer and
+the `api://<upload-api-client-id>` audience and returns HTTP 401 before invoking
+the function when the bearer token is absent or invalid. The function's HTTP
+trigger is therefore anonymous at the Functions-host layer; do not disable Easy
+Auth on the deployed app.
 
 ```powershell
 az login
@@ -187,7 +213,8 @@ az deployment group create `
   --template-file infra/main.bicep `
   --parameters namePrefix=frsaidemo location=eastus `
                entraClientId=<application-client-id> `
-               entraClientSecret=$entraSecretPlain
+               entraClientSecret=$entraSecretPlain `
+               uploadApiClientId=<upload-api-client-id>
 
 Remove-Variable entraSecretPlain
 ```
@@ -199,7 +226,9 @@ az bicep build --file infra/main.bicep --stdout
 az deployment group what-if `
   --resource-group rg-frs-ai-demo `
   --template-file infra/main.bicep `
-  --parameters entraClientId=<application-client-id> entraClientSecret=<client-secret>
+  --parameters entraClientId=<application-client-id> `
+               entraClientSecret=<client-secret> `
+               uploadApiClientId=<upload-api-client-id>
 ```
 
 > Deployment takes noticeably longer than a plain PaaS-only setup — Private
@@ -207,9 +236,10 @@ az deployment group what-if `
 > each add a few minutes. See [Networking](#networking) above for what's
 > being provisioned and its cost/local-dev implications.
 
-After deployment, note the outputs (`functionAppName`, `storageAccountName`,
-`webAppName`, `webAppHostName`, etc.) — you'll need the Function App's publish
-settings/function key to call the upload endpoint, and `webAppHostName` to add
+After deployment, note the outputs (`functionAppName`, `functionAppHostName`,
+`storageAccountName`, `webAppName`, `webAppHostName`, etc.). Use
+`functionAppHostName` and the upload API client ID to configure the upload
+harness. Add
 `https://<webAppHostName>/signin-oidc` as a redirect URI on the Entra app
 registration. The Face API resource must have **Limited Access** approval from
 Microsoft before the `Identify`/Person Directory operations will work in a
@@ -225,7 +255,7 @@ Compress-Archive -Path publish\* -DestinationPath publish.zip -Force
 az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --name <functionAppName> --src publish.zip
 ```
 
-## Local developmentstegriff@MngEnvMCAP814043.onmicrosoft.com
+## Local development
 
 1. Copy `src/FunctionApp/local.settings.json.example` to
    `src/FunctionApp/local.settings.json` and fill in the resource names/
@@ -243,10 +273,10 @@ az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --na
    setting to exclude managed identity from its own credential resolution
    for `AzureWebJobsStorage`.
    Install and start Azurite before running the Function App:
-   ```powershell
-   npm install -g azurite
+```powershell
+  npm install -g azurite
    azurite --silent --location .azurite --debug .azurite/debug.log
-   ```
+```
    Leave it running in its own terminal (or a background task) while you
    use `func start`.
 2. Ensure you're signed in with `az login` (or have Visual Studio/VS Code
@@ -255,17 +285,17 @@ az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --na
    everything other than `AzureWebJobsStorage` (Photos container, Cosmos
    DB, Face API). Your signed-in identity needs **Storage Blob Data
    Contributor** on the storage account for the Photos container:
-   ```powershell
-   az role assignment create --assignee <your-user-or-object-id> `
+```powershell
+  az role assignment create --assignee <your-user-or-object-id> `
      --role "Storage Blob Data Contributor" `
      --scope <storageAccountResourceId>
-   ```
+```
 3. Install [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
    (`func`) and run:
-   ```powershell
-   cd src/FunctionApp
+```powershell
+  cd src/FunctionApp
    func start
-   ```
+```
    > **Known issue on machines with Azure Arc installed:** the
    > `ProcessPhotoFunction` Event Hub trigger is also an identity-based
    > connection (`EventHub__fullyQualifiedNamespace`), and there's no
@@ -275,7 +305,7 @@ az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --na
    > (`LocalAuthDisabled`), a plain connection string won't work either. In
    > that case the listener will fail to start with the same
    > `ManagedIdentityCredential authentication failed ... Tokens\*.key is
-   > denied` error as `AzureWebJobsStorage` did. There's no Event Hub
+   > denied`error as`AzureWebJobsStorage\` did. There's no Event Hub
    > emulator equivalent to Azurite without Docker (see the [Azure Event
    > Hubs emulator](https://learn.microsoft.com/azure/event-hubs/overview-emulator)),
    > so the only fixes are on the machine itself: stop the Azure Connected
@@ -284,11 +314,11 @@ az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --na
    > local group so it can read the token file — both require an elevated
    > PowerShell session.
 4. Upload a test photo:
-   ```powershell
-   curl -X POST "http://localhost:7071/api/photos" `
+```powershell
+  curl -X POST "http://localhost:7071/api/photos" `
      -H "Content-Type: image/jpeg" `
      --data-binary "@C:\path\to\photo.jpg"
-   ```
+```
 
 ## Local upload harness
 
@@ -300,21 +330,32 @@ feed), and can optionally poll Cosmos DB to confirm each photo was
 recognized end-to-end.
 
 ```powershell
+az login --tenant <tenant-id>
 cd src/Tools/PhotoUploadHarness
 Copy-Item appsettings.json.example appsettings.json
-# edit appsettings.json: set FolderPath (and BaseUrl/FunctionKey if targeting a deployed Function App)
+# For Azure, set BaseUrl, EntraClientId, and FolderPath in appsettings.json.
 dotnet run
 ```
 
 Key options (in `appsettings.json`, or overridden via `--Key=Value` args):
 
 | Option | Purpose |
-|---|---|
-| `BaseUrl` | Upload endpoint; defaults to local `func start` (`http://localhost:7071/api/photos`). No function key is needed locally — only against a deployed Function App. |
+| --- | --- |
+| `BaseUrl` | Upload endpoint; defaults to local `func start` (`http://localhost:7071/api/photos`). For Azure, use `https://<functionAppHostName>/api/photos`. |
+| `EntraClientId` | Client ID of the upload API app registration. Required for a non-local `BaseUrl`; ignored for localhost. |
 | `FolderPath` | Folder of images to upload. |
 | `Mode` | `batch` (upload each file once) or `continuous` (loop with `IntervalSeconds` delay, Ctrl+C to stop). |
 | `MaxIterations` | Continuous mode only; `0` loops until cancelled. |
 | `EnableVerification` | If `true`, polls the `Faces` Cosmos container (`DefaultAzureCredential`) for each upload's recognition result, up to `VerificationTimeoutSeconds`. Requires deployed Cosmos DB access. |
+
+For a deployed endpoint, the harness requests
+`api://<EntraClientId>/.default` with its developer credential chain (including
+the signed-in Azure CLI identity) and sends the resulting bearer token. It never
+stores or logs the token. Uploading works from an internet-connected outside
+source because Function App ingress remains public. `EnableVerification=true`
+is different: Cosmos DB has public network access disabled, so direct
+verification still requires VPN/ExpressRoute or execution inside the VNet, plus
+Cosmos data-plane permissions for the signed-in identity.
 
 ## Synthetic face SDK benchmark
 
@@ -407,7 +448,8 @@ az deployment group create `
   --template-file infra/main.bicep `
   --parameters namePrefix=frsaidemo location=eastus `
                entraClientId=<application-client-id> `
-               entraClientSecret=$entraSecretPlain
+               entraClientSecret=$entraSecretPlain `
+               uploadApiClientId=<upload-api-client-id>
 
 Remove-Variable entraSecretPlain
 
@@ -481,6 +523,7 @@ uv run --project src/Tools/FaceBenchmark python -m unittest discover -s src/Tool
 
 # Complete mixed-target solution and tests (.NET 10 SDK)
 dotnet build FrsAiDemo.slnx
+dotnet test tests/PhotoUploadHarness.Tests/FrsAiDemo.PhotoUploadHarness.Tests.csproj
 dotnet test tests/WebApp.Tests/FrsAiDemo.WebApp.Tests.csproj
 
 # Bicep templates
@@ -497,9 +540,10 @@ az bicep build --file infra/main.bicep --stdout
   the previous trained PersonGroup flow remain visible, but new duplicate
   matching starts with identities enrolled in Person Directory after this
   deployment.
-- **Upload endpoint auth** defaults to Azure Functions key-based auth
-  (`AuthorizationLevel.Function`). Add Azure AD/APIM in front of it for
-  production-grade user authentication.
+- **Upload authorization is tenant-wide.** Easy Auth requires a valid token for
+  the configured upload API audience and tenant, but does not currently require
+  an app role or group claim. Any tenant identity authorized to request the
+  delegated upload scope can call the endpoint.
 - **Reviews are photo-level.** Existing recognition records do not contain a
   stable sighting ID or face rectangle, so multi-face photos do not highlight
   the specific detected face. Review keys are deterministically derived from
