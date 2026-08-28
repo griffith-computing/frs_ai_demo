@@ -228,7 +228,7 @@ def _json(response: HttpResponse) -> Any:
 
 
 def _retry_after(headers: dict[str, str]) -> float:
-    value = headers.get("retry-after", "1")
+    value = next((v for k, v in headers.items() if k.lower() == "retry-after"), "1")
     try:
         return max(0.0, min(float(value), 60.0))
     except ValueError:
