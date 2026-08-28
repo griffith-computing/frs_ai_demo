@@ -302,7 +302,7 @@ independently; never compare raw confidences directly.
 - The bundled Haar detector avoids a separate model download but is less robust
   than landmark-based detectors. The benchmark compensates by generating
   centered frontal portraits and using a deterministic padded crop; results
-  remain specific to benchmark version 1.1 and its pinned OpenCV package.
+  remain specific to this benchmark version and its pinned OpenCV package.
 - Synthetic demographic appearance is not reliable ground-truth demographic
   labeling. This benchmark does not establish demographic fairness.
 - The benchmark does not replace testing on lawfully obtained, consented,
