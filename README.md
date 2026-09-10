@@ -177,6 +177,8 @@ secure value at deploy time (or via `entraClientSecret` in Key Vault reference).
 | `entraClientId` | **Yes** | — | Client ID of the reviewer web app's Entra registration. |
 | `entraClientSecret` | **Yes** (`@secure`) | — | Client secret of the Entra registration. Supply at deploy time; never commit it. |
 | `uploadApiClientId` | **Yes** | — | Client ID of the dedicated Entra app registration representing the upload Function API. |
+| `useExistingFaceAccount` | No | `false` | Set to `true` to reuse an existing Azure AI Face account instead of provisioning a new one. |
+| `existingFaceAccountName` | Only if `useExistingFaceAccount=true` | — | Name of the existing Azure AI Face (Cognitive Services, `kind=Face`) account to reuse. Must already exist in this same resource group. |
 
 ### Upload API Microsoft Entra setup
 

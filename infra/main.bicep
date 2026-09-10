@@ -36,6 +36,12 @@ param entraClientSecret string
 @description('Client ID of the single-tenant Microsoft Entra application registration that represents the upload Function API.')
 param uploadApiClientId string
 
+@description('Set to true to reuse an existing Azure AI Face account instead of provisioning a new one. The existing account must already exist in this resource group.')
+param useExistingFaceAccount bool = false
+
+@description('Name of the existing Azure AI Face (Cognitive Services, kind=Face) account to reuse. Required when useExistingFaceAccount is true; must be in this resource group.')
+param existingFaceAccountName string = ''
+
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}st${suffix}')
 var eventHubNamespaceName = '${namePrefix}-ehns-${suffix}'
@@ -101,6 +107,8 @@ module face 'modules/face.bicep' = {
   params: {
     faceAccountName: faceAccountName
     location: location
+    useExistingFaceAccount: useExistingFaceAccount
+    existingFaceAccountName: existingFaceAccountName
   }
 }
 
@@ -124,8 +132,8 @@ module privateEndpoints 'modules/privateendpoints.bicep' = {
     eventHubNamespaceName: eventHubNamespaceName
     cosmosAccountId: resourceId('Microsoft.DocumentDB/databaseAccounts', cosmosAccountName)
     cosmosAccountName: cosmosAccountName
-    faceAccountId: resourceId('Microsoft.CognitiveServices/accounts', faceAccountName)
-    faceAccountName: faceAccountName
+    faceAccountId: face.outputs.faceAccountId
+    faceAccountName: face.outputs.faceAccountName
   }
   dependsOn: [
     storage
