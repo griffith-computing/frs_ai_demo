@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "9996136029398355519"
+      "templateHash": "12752489907144294575"
     }
   },
   "parameters": {
@@ -55,6 +55,104 @@
       "type": "string",
       "metadata": {
         "description": "Client ID of the single-tenant Microsoft Entra application registration that represents the upload Function API."
+      }
+    },
+    "useExistingStorageAccount": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to reuse an existing storage account instead of provisioning a new one. The existing account must already exist in this resource group."
+      }
+    },
+    "existingStorageAccountName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing storage account to reuse. Required when useExistingStorageAccount is true; must be in this resource group."
+      }
+    },
+    "useExistingEventHubNamespace": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to reuse an existing Event Hubs namespace instead of provisioning a new one. The existing namespace must already exist in this resource group."
+      }
+    },
+    "existingEventHubNamespaceName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing Event Hubs namespace to reuse. Required when useExistingEventHubNamespace is true; must be in this resource group."
+      }
+    },
+    "useExistingCosmosAccount": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to reuse an existing Cosmos DB account instead of provisioning a new one. The existing account must already exist in this resource group."
+      }
+    },
+    "existingCosmosAccountName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing Cosmos DB account to reuse. Required when useExistingCosmosAccount is true; must be in this resource group."
+      }
+    },
+    "useExistingFaceAccount": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to reuse an existing Azure AI Face account instead of provisioning a new one. The existing account must already exist in this resource group."
+      }
+    },
+    "existingFaceAccountName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing Azure AI Face (Cognitive Services, kind=Face) account to reuse. Required when useExistingFaceAccount is true; must be in this resource group."
+      }
+    },
+    "useExistingFunctionApp": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to reuse an existing Function App and its App Service plan. Both resources must already exist in this resource group and match the deployment region."
+      }
+    },
+    "existingFunctionAppName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing Function App to reuse. Required when useExistingFunctionApp is true; must be in this resource group and deployment region."
+      }
+    },
+    "existingFunctionAppPlanName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing App Service plan used by the Function App. Required when useExistingFunctionApp is true; must be in this resource group and deployment region."
+      }
+    },
+    "useExistingWebApp": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to reuse an existing Web App and its App Service plan. Both resources must already exist in this resource group and match the deployment region."
+      }
+    },
+    "existingWebAppName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing Web App to reuse. Required when useExistingWebApp is true; must be in this resource group and deployment region."
+      }
+    },
+    "existingWebAppPlanName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the existing App Service plan used by the Web App. Required when useExistingWebApp is true; must be in this resource group and deployment region."
       }
     }
   },
@@ -365,6 +463,12 @@
           },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "useExistingStorageAccount": {
+            "value": "[parameters('useExistingStorageAccount')]"
+          },
+          "existingStorageAccountName": {
+            "value": "[parameters('existingStorageAccountName')]"
           }
         },
         "template": {
@@ -374,7 +478,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "17892620927398188155"
+              "templateHash": "10335987097086326399"
             }
           },
           "parameters": {
@@ -390,6 +494,20 @@
                 "description": "Azure region for the storage account."
               }
             },
+            "useExistingStorageAccount": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to reuse an existing storage account in this resource group."
+              }
+            },
+            "existingStorageAccountName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing storage account to reuse. Required when useExistingStorageAccount is true."
+              }
+            },
             "photosContainerName": {
               "type": "string",
               "defaultValue": "photos",
@@ -398,8 +516,12 @@
               }
             }
           },
+          "variables": {
+            "effectiveStorageAccountName": "[if(parameters('useExistingStorageAccount'), parameters('existingStorageAccountName'), parameters('storageAccountName'))]"
+          },
           "resources": [
             {
+              "condition": "[not(parameters('useExistingStorageAccount'))]",
               "type": "Microsoft.Storage/storageAccounts",
               "apiVersion": "2023-01-01",
               "name": "[parameters('storageAccountName')]",
@@ -423,7 +545,7 @@
             {
               "type": "Microsoft.Storage/storageAccounts/blobServices",
               "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "name": "[format('{0}/default', variables('effectiveStorageAccountName'))]",
               "dependsOn": [
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
               ]
@@ -431,27 +553,27 @@
             {
               "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
               "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('photosContainerName'))]",
+              "name": "[format('{0}/{1}/{2}', split(format('{0}/default', variables('effectiveStorageAccountName')), '/')[0], split(format('{0}/default', variables('effectiveStorageAccountName')), '/')[1], parameters('photosContainerName'))]",
               "properties": {
                 "publicAccess": "None"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', split(format('{0}/default', variables('effectiveStorageAccountName')), '/')[0], split(format('{0}/default', variables('effectiveStorageAccountName')), '/')[1])]"
               ]
             }
           ],
           "outputs": {
             "storageAccountId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              "value": "[if(parameters('useExistingStorageAccount'), resourceId('Microsoft.Storage/storageAccounts', parameters('existingStorageAccountName')), resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')))]"
             },
             "storageAccountName": {
               "type": "string",
-              "value": "[parameters('storageAccountName')]"
+              "value": "[variables('effectiveStorageAccountName')]"
             },
             "blobEndpoint": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob]"
+              "value": "[if(parameters('useExistingStorageAccount'), reference(resourceId('Microsoft.Storage/storageAccounts', parameters('existingStorageAccountName')), '2023-01-01').primaryEndpoints.blob, reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob)]"
             }
           }
         }
@@ -472,6 +594,12 @@
           },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "useExistingEventHubNamespace": {
+            "value": "[parameters('useExistingEventHubNamespace')]"
+          },
+          "existingEventHubNamespaceName": {
+            "value": "[parameters('existingEventHubNamespaceName')]"
           }
         },
         "template": {
@@ -481,7 +609,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "5558742773036259247"
+              "templateHash": "3891174542751520501"
             }
           },
           "parameters": {
@@ -495,6 +623,20 @@
               "type": "string",
               "metadata": {
                 "description": "Azure region for the Event Hub namespace."
+              }
+            },
+            "useExistingEventHubNamespace": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to reuse an existing Event Hubs namespace in this resource group."
+              }
+            },
+            "existingEventHubNamespaceName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing Event Hubs namespace to reuse. Required when useExistingEventHubNamespace is true."
               }
             },
             "eventHubName": {
@@ -523,8 +665,12 @@
               }
             }
           },
+          "variables": {
+            "effectiveNamespaceName": "[if(parameters('useExistingEventHubNamespace'), parameters('existingEventHubNamespaceName'), parameters('namespaceName'))]"
+          },
           "resources": [
             {
+              "condition": "[not(parameters('useExistingEventHubNamespace'))]",
               "type": "Microsoft.EventHub/namespaces",
               "apiVersion": "2023-01-01-preview",
               "name": "[parameters('namespaceName')]",
@@ -543,7 +689,7 @@
             {
               "type": "Microsoft.EventHub/namespaces/eventhubs",
               "apiVersion": "2023-01-01-preview",
-              "name": "[format('{0}/{1}', parameters('namespaceName'), parameters('eventHubName'))]",
+              "name": "[format('{0}/{1}', variables('effectiveNamespaceName'), parameters('eventHubName'))]",
               "properties": {
                 "messageRetentionInDays": 1,
                 "partitionCount": 2
@@ -555,20 +701,20 @@
             {
               "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
               "apiVersion": "2023-01-01-preview",
-              "name": "[format('{0}/{1}/{2}', parameters('namespaceName'), parameters('eventHubName'), parameters('consumerGroupName'))]",
+              "name": "[format('{0}/{1}/{2}', split(format('{0}/{1}', variables('effectiveNamespaceName'), parameters('eventHubName')), '/')[0], split(format('{0}/{1}', variables('effectiveNamespaceName'), parameters('eventHubName')), '/')[1], parameters('consumerGroupName'))]",
               "dependsOn": [
-                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('namespaceName'), parameters('eventHubName'))]"
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', split(format('{0}/{1}', variables('effectiveNamespaceName'), parameters('eventHubName')), '/')[0], split(format('{0}/{1}', variables('effectiveNamespaceName'), parameters('eventHubName')), '/')[1])]"
               ]
             }
           ],
           "outputs": {
             "namespaceId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.EventHub/namespaces', parameters('namespaceName'))]"
+              "value": "[if(parameters('useExistingEventHubNamespace'), resourceId('Microsoft.EventHub/namespaces', parameters('existingEventHubNamespaceName')), resourceId('Microsoft.EventHub/namespaces', parameters('namespaceName')))]"
             },
             "namespaceName": {
               "type": "string",
-              "value": "[parameters('namespaceName')]"
+              "value": "[variables('effectiveNamespaceName')]"
             },
             "eventHubName": {
               "type": "string",
@@ -580,7 +726,7 @@
             },
             "fullyQualifiedNamespace": {
               "type": "string",
-              "value": "[format('{0}.servicebus.windows.net', parameters('namespaceName'))]"
+              "value": "[format('{0}.servicebus.windows.net', variables('effectiveNamespaceName'))]"
             }
           }
         }
@@ -601,6 +747,12 @@
           },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "useExistingCosmosAccount": {
+            "value": "[parameters('useExistingCosmosAccount')]"
+          },
+          "existingCosmosAccountName": {
+            "value": "[parameters('existingCosmosAccountName')]"
           }
         },
         "template": {
@@ -610,7 +762,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "1073630085041129076"
+              "templateHash": "10496503436531987395"
             }
           },
           "parameters": {
@@ -624,6 +776,20 @@
               "type": "string",
               "metadata": {
                 "description": "Azure region for the Cosmos DB account."
+              }
+            },
+            "useExistingCosmosAccount": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to reuse an existing Cosmos DB account in this resource group."
+              }
+            },
+            "existingCosmosAccountName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing Cosmos DB account to reuse. Required when useExistingCosmosAccount is true."
               }
             },
             "databaseName": {
@@ -655,8 +821,12 @@
               }
             }
           },
+          "variables": {
+            "effectiveCosmosAccountName": "[if(parameters('useExistingCosmosAccount'), parameters('existingCosmosAccountName'), parameters('accountName'))]"
+          },
           "resources": [
             {
+              "condition": "[not(parameters('useExistingCosmosAccount'))]",
               "type": "Microsoft.DocumentDB/databaseAccounts",
               "apiVersion": "2023-11-15",
               "name": "[parameters('accountName')]",
@@ -681,7 +851,7 @@
             {
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
               "apiVersion": "2023-11-15",
-              "name": "[format('{0}/{1}', parameters('accountName'), parameters('databaseName'))]",
+              "name": "[format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName'))]",
               "properties": {
                 "resource": {
                   "id": "[parameters('databaseName')]"
@@ -694,7 +864,7 @@
             {
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
               "apiVersion": "2023-11-15",
-              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('databaseName'), parameters('facesContainerName'))]",
+              "name": "[format('{0}/{1}/{2}', split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[0], split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[1], parameters('facesContainerName'))]",
               "properties": {
                 "resource": {
                   "id": "[parameters('facesContainerName')]",
@@ -711,13 +881,13 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('accountName'), parameters('databaseName'))]"
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[0], split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[1])]"
               ]
             },
             {
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
               "apiVersion": "2023-11-15",
-              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('databaseName'), parameters('uploadsContainerName'))]",
+              "name": "[format('{0}/{1}/{2}', split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[0], split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[1], parameters('uploadsContainerName'))]",
               "properties": {
                 "resource": {
                   "id": "[parameters('uploadsContainerName')]",
@@ -734,13 +904,13 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('accountName'), parameters('databaseName'))]"
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[0], split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[1])]"
               ]
             },
             {
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
               "apiVersion": "2023-11-15",
-              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('databaseName'), parameters('reviewsContainerName'))]",
+              "name": "[format('{0}/{1}/{2}', split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[0], split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[1], parameters('reviewsContainerName'))]",
               "properties": {
                 "resource": {
                   "id": "[parameters('reviewsContainerName')]",
@@ -757,22 +927,22 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('accountName'), parameters('databaseName'))]"
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[0], split(format('{0}/{1}', variables('effectiveCosmosAccountName'), parameters('databaseName')), '/')[1])]"
               ]
             }
           ],
           "outputs": {
             "cosmosAccountId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('accountName'))]"
+              "value": "[if(parameters('useExistingCosmosAccount'), resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('existingCosmosAccountName')), resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('accountName')))]"
             },
             "cosmosAccountName": {
               "type": "string",
-              "value": "[parameters('accountName')]"
+              "value": "[variables('effectiveCosmosAccountName')]"
             },
             "cosmosEndpoint": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('accountName')), '2023-11-15').documentEndpoint]"
+              "value": "[if(parameters('useExistingCosmosAccount'), reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('existingCosmosAccountName')), '2023-11-15').documentEndpoint, reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('accountName')), '2023-11-15').documentEndpoint)]"
             },
             "databaseName": {
               "type": "string",
@@ -809,6 +979,12 @@
           },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "useExistingFaceAccount": {
+            "value": "[parameters('useExistingFaceAccount')]"
+          },
+          "existingFaceAccountName": {
+            "value": "[parameters('existingFaceAccountName')]"
           }
         },
         "template": {
@@ -818,14 +994,14 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "2009369545377368151"
+              "templateHash": "3670791535363200765"
             }
           },
           "parameters": {
             "faceAccountName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the Azure AI Face resource."
+                "description": "Name of the Azure AI Face resource. Used to create a new account when useExistingFaceAccount is false."
               }
             },
             "location": {
@@ -840,10 +1016,25 @@
               "metadata": {
                 "description": "SKU for the Face API resource."
               }
+            },
+            "useExistingFaceAccount": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to reuse an existing Azure AI Face account instead of creating a new one. The existing account must already exist in this deployment's resource group."
+              }
+            },
+            "existingFaceAccountName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing Azure AI Face (Cognitive Services, kind=Face) account to reuse. Required when useExistingFaceAccount is true; must be in this deployment's resource group."
+              }
             }
           },
           "resources": [
             {
+              "condition": "[not(parameters('useExistingFaceAccount'))]",
               "type": "Microsoft.CognitiveServices/accounts",
               "apiVersion": "2023-05-01",
               "name": "[parameters('faceAccountName')]",
@@ -865,15 +1056,15 @@
           "outputs": {
             "faceAccountId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('faceAccountName'))]"
+              "value": "[if(parameters('useExistingFaceAccount'), resourceId('Microsoft.CognitiveServices/accounts', parameters('existingFaceAccountName')), resourceId('Microsoft.CognitiveServices/accounts', parameters('faceAccountName')))]"
             },
             "faceAccountName": {
               "type": "string",
-              "value": "[parameters('faceAccountName')]"
+              "value": "[if(parameters('useExistingFaceAccount'), parameters('existingFaceAccountName'), parameters('faceAccountName'))]"
             },
             "faceEndpoint": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('faceAccountName')), '2023-05-01').endpoint]"
+              "value": "[if(parameters('useExistingFaceAccount'), reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('existingFaceAccountName')), '2023-05-01').endpoint, reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('faceAccountName')), '2023-05-01').endpoint)]"
             }
           }
         }
@@ -986,28 +1177,28 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'networkDeploy'), '2025-04-01').outputs.vnetId.value]"
           },
           "storageAccountId": {
-            "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storageDeploy'), '2025-04-01').outputs.storageAccountId.value]"
           },
           "storageAccountName": {
-            "value": "[variables('storageAccountName')]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storageDeploy'), '2025-04-01').outputs.storageAccountName.value]"
           },
           "eventHubNamespaceId": {
-            "value": "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNamespaceName'))]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'eventHubDeploy'), '2025-04-01').outputs.namespaceId.value]"
           },
           "eventHubNamespaceName": {
-            "value": "[variables('eventHubNamespaceName')]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'eventHubDeploy'), '2025-04-01').outputs.namespaceName.value]"
           },
           "cosmosAccountId": {
-            "value": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.cosmosAccountId.value]"
           },
           "cosmosAccountName": {
-            "value": "[variables('cosmosAccountName')]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmosDeploy'), '2025-04-01').outputs.cosmosAccountName.value]"
           },
           "faceAccountId": {
-            "value": "[resourceId('Microsoft.CognitiveServices/accounts', variables('faceAccountName'))]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'faceDeploy'), '2025-04-01').outputs.faceAccountId.value]"
           },
           "faceAccountName": {
-            "value": "[variables('faceAccountName')]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'faceDeploy'), '2025-04-01').outputs.faceAccountName.value]"
           }
         },
         "template": {
@@ -1496,6 +1687,15 @@
           "location": {
             "value": "[parameters('location')]"
           },
+          "useExistingFunctionApp": {
+            "value": "[parameters('useExistingFunctionApp')]"
+          },
+          "existingFunctionAppName": {
+            "value": "[parameters('existingFunctionAppName')]"
+          },
+          "existingFunctionAppPlanName": {
+            "value": "[parameters('existingFunctionAppPlanName')]"
+          },
           "storageAccountName": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storageDeploy'), '2025-04-01').outputs.storageAccountName.value]"
           },
@@ -1552,7 +1752,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "6113143250857374932"
+              "templateHash": "10498822785356495222"
             }
           },
           "parameters": {
@@ -1566,6 +1766,27 @@
               "type": "string",
               "metadata": {
                 "description": "Azure region for the Function App and related resources."
+              }
+            },
+            "useExistingFunctionApp": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to reuse an existing Function App and App Service plan in this resource group and deployment region."
+              }
+            },
+            "existingFunctionAppName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing Function App to reuse. Required when useExistingFunctionApp is true."
+              }
+            },
+            "existingFunctionAppPlanName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing App Service plan used by the Function App. Required when useExistingFunctionApp is true."
               }
             },
             "storageAccountName": {
@@ -1675,10 +1896,12 @@
           },
           "variables": {
             "hostingPlanName": "[format('{0}-plan', parameters('functionAppName'))]",
+            "effectiveFunctionAppName": "[if(parameters('useExistingFunctionApp'), parameters('existingFunctionAppName'), parameters('functionAppName'))]",
             "uploadApiAudience": "[format('api://{0}', parameters('uploadApiClientId'))]"
           },
           "resources": [
             {
+              "condition": "[not(parameters('useExistingFunctionApp'))]",
               "type": "Microsoft.Web/serverfarms",
               "apiVersion": "2023-01-01",
               "name": "[variables('hostingPlanName')]",
@@ -1695,7 +1918,7 @@
             {
               "type": "Microsoft.Web/sites",
               "apiVersion": "2023-01-01",
-              "name": "[parameters('functionAppName')]",
+              "name": "[variables('effectiveFunctionAppName')]",
               "location": "[parameters('location')]",
               "kind": "functionapp",
               "identity": {
@@ -1705,7 +1928,7 @@
                 }
               },
               "properties": {
-                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "serverFarmId": "[if(parameters('useExistingFunctionApp'), resourceId('Microsoft.Web/serverfarms', parameters('existingFunctionAppPlanName')), resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName')))]",
                 "httpsOnly": true,
                 "virtualNetworkSubnetId": "[parameters('integrationSubnetId')]",
                 "vnetRouteAllEnabled": true,
@@ -1807,7 +2030,7 @@
             {
               "type": "Microsoft.Web/sites/config",
               "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}', parameters('functionAppName'), 'authsettingsV2')]",
+              "name": "[format('{0}/{1}', variables('effectiveFunctionAppName'), 'authsettingsV2')]",
               "properties": {
                 "platform": {
                   "enabled": true,
@@ -1841,22 +2064,22 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+                "[resourceId('Microsoft.Web/sites', variables('effectiveFunctionAppName'))]"
               ]
             }
           ],
           "outputs": {
             "functionAppId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+              "value": "[resourceId('Microsoft.Web/sites', variables('effectiveFunctionAppName'))]"
             },
             "functionAppName": {
               "type": "string",
-              "value": "[parameters('functionAppName')]"
+              "value": "[variables('effectiveFunctionAppName')]"
             },
             "functionAppHostName": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2023-01-01').defaultHostName]"
+              "value": "[reference(resourceId('Microsoft.Web/sites', variables('effectiveFunctionAppName')), '2023-01-01').defaultHostName]"
             }
           }
         }
@@ -2017,6 +2240,15 @@
           "location": {
             "value": "[parameters('location')]"
           },
+          "useExistingWebApp": {
+            "value": "[parameters('useExistingWebApp')]"
+          },
+          "existingWebAppName": {
+            "value": "[parameters('existingWebAppName')]"
+          },
+          "existingWebAppPlanName": {
+            "value": "[parameters('existingWebAppPlanName')]"
+          },
           "userAssignedIdentityId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'webIdentityDeploy'), '2025-04-01').outputs.identityId.value]"
           },
@@ -2073,7 +2305,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "7027262440198995878"
+              "templateHash": "1727876909946927631"
             }
           },
           "parameters": {
@@ -2087,6 +2319,27 @@
               "type": "string",
               "metadata": {
                 "description": "Azure region for the web app."
+              }
+            },
+            "useExistingWebApp": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to reuse an existing Web App and App Service plan in this resource group and deployment region."
+              }
+            },
+            "existingWebAppName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing Web App to reuse. Required when useExistingWebApp is true."
+              }
+            },
+            "existingWebAppPlanName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the existing App Service plan used by the Web App. Required when useExistingWebApp is true."
               }
             },
             "userAssignedIdentityId": {
@@ -2187,10 +2440,12 @@
             }
           },
           "variables": {
-            "planName": "[format('{0}-plan', parameters('webAppName'))]"
+            "planName": "[format('{0}-plan', parameters('webAppName'))]",
+            "effectiveWebAppName": "[if(parameters('useExistingWebApp'), parameters('existingWebAppName'), parameters('webAppName'))]"
           },
           "resources": [
             {
+              "condition": "[not(parameters('useExistingWebApp'))]",
               "type": "Microsoft.Web/serverfarms",
               "apiVersion": "2023-12-01",
               "name": "[variables('planName')]",
@@ -2207,7 +2462,7 @@
             {
               "type": "Microsoft.Web/sites",
               "apiVersion": "2023-12-01",
-              "name": "[parameters('webAppName')]",
+              "name": "[variables('effectiveWebAppName')]",
               "location": "[parameters('location')]",
               "kind": "app,linux",
               "identity": {
@@ -2217,7 +2472,7 @@
                 }
               },
               "properties": {
-                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+                "serverFarmId": "[if(parameters('useExistingWebApp'), resourceId('Microsoft.Web/serverfarms', parameters('existingWebAppPlanName')), resourceId('Microsoft.Web/serverfarms', variables('planName')))]",
                 "httpsOnly": true,
                 "virtualNetworkSubnetId": "[parameters('integrationSubnetId')]",
                 "vnetRouteAllEnabled": true,
@@ -2229,7 +2484,7 @@
                   "healthCheckPath": "/health",
                   "cors": {
                     "allowedOrigins": [
-                      "[format('https://{0}.azurewebsites.net', parameters('webAppName'))]"
+                      "[format('https://{0}.azurewebsites.net', variables('effectiveWebAppName'))]"
                     ],
                     "supportCredentials": false
                   },
@@ -2312,8 +2567,8 @@
             {
               "type": "Microsoft.Insights/diagnosticSettings",
               "apiVersion": "2021-05-01-preview",
-              "scope": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
-              "name": "[format('{0}-diagnostics', parameters('webAppName'))]",
+              "scope": "[resourceId('Microsoft.Web/sites', variables('effectiveWebAppName'))]",
+              "name": "[format('{0}-diagnostics', variables('effectiveWebAppName'))]",
               "properties": {
                 "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
                 "logs": [
@@ -2330,22 +2585,22 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+                "[resourceId('Microsoft.Web/sites', variables('effectiveWebAppName'))]"
               ]
             }
           ],
           "outputs": {
             "webAppId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+              "value": "[resourceId('Microsoft.Web/sites', variables('effectiveWebAppName'))]"
             },
             "webAppName": {
               "type": "string",
-              "value": "[parameters('webAppName')]"
+              "value": "[variables('effectiveWebAppName')]"
             },
             "webAppHostName": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2023-12-01').defaultHostName]"
+              "value": "[reference(resourceId('Microsoft.Web/sites', variables('effectiveWebAppName')), '2023-12-01').defaultHostName]"
             }
           }
         }

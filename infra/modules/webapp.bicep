@@ -18,6 +18,15 @@ param webAppName string
 @description('Azure region for the web app.')
 param location string
 
+@description('Set to true to reuse an existing Web App and App Service plan in this resource group and deployment region.')
+param useExistingWebApp bool = false
+
+@description('Name of the existing Web App to reuse. Required when useExistingWebApp is true.')
+param existingWebAppName string = ''
+
+@description('Name of the existing App Service plan used by the Web App. Required when useExistingWebApp is true.')
+param existingWebAppPlanName string = ''
+
 @description('Resource ID of the user-assigned identity attached to the web app.')
 param userAssignedIdentityId string
 
@@ -68,8 +77,13 @@ param eventHubFullyQualifiedNamespace string
 param eventHubName string
 
 var planName = '${webAppName}-plan'
+var effectiveWebAppName = useExistingWebApp ? existingWebAppName : webAppName
 
-resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
+resource existingPlan 'Microsoft.Web/serverfarms@2023-12-01' existing = if (useExistingWebApp) {
+  name: existingWebAppPlanName
+}
+
+resource plan 'Microsoft.Web/serverfarms@2023-12-01' = if (!useExistingWebApp) {
   name: planName
   location: location
   kind: 'linux'
@@ -83,7 +97,7 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
 }
 
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
-  name: webAppName
+  name: effectiveWebAppName
   location: location
   kind: 'app,linux'
   identity: {
@@ -93,7 +107,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     }
   }
   properties: {
-    serverFarmId: plan.id
+    serverFarmId: useExistingWebApp ? existingPlan.id : plan.id
     httpsOnly: true
     virtualNetworkSubnetId: integrationSubnetId
     vnetRouteAllEnabled: true
@@ -105,7 +119,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       healthCheckPath: '/health'
       cors: {
         allowedOrigins: [
-          'https://${webAppName}.azurewebsites.net'
+          'https://${effectiveWebAppName}.azurewebsites.net'
         ]
         supportCredentials: false
       }
@@ -133,7 +147,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
-  name: '${webAppName}-diagnostics'
+  name: '${effectiveWebAppName}-diagnostics'
   scope: webApp
   properties: {
     workspaceId: logAnalyticsWorkspaceId

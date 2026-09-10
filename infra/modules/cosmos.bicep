@@ -18,6 +18,12 @@ param accountName string
 @description('Azure region for the Cosmos DB account.')
 param location string
 
+@description('Set to true to reuse an existing Cosmos DB account in this resource group.')
+param useExistingCosmosAccount bool = false
+
+@description('Name of the existing Cosmos DB account to reuse. Required when useExistingCosmosAccount is true.')
+param existingCosmosAccountName string = ''
+
 @description('Name of the SQL (NoSQL) database.')
 param databaseName string = 'FacialRecognitionDb'
 
@@ -30,7 +36,13 @@ param uploadsContainerName string = 'Uploads'
 @description('Name of the container that stores reviewer decisions.')
 param reviewsContainerName string = 'Reviews'
 
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
+var effectiveCosmosAccountName = useExistingCosmosAccount ? existingCosmosAccountName : accountName
+
+resource existingCosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' existing = if (useExistingCosmosAccount) {
+  name: existingCosmosAccountName
+}
+
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = if (!useExistingCosmosAccount) {
   name: accountName
   location: location
   kind: 'GlobalDocumentDB'
@@ -52,13 +64,16 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
 }
 
 resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15' = {
-  parent: cosmosAccount
-  name: databaseName
+  name: '${effectiveCosmosAccountName}/${databaseName}'
   properties: {
     resource: {
       id: databaseName
     }
   }
+  dependsOn: [
+    existingCosmosAccount
+    cosmosAccount
+  ]
 }
 
 resource facesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = {
@@ -121,10 +136,10 @@ resource reviewsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
   }
 }
 
-output cosmosAccountId string = cosmosAccount.id
-output cosmosAccountName string = cosmosAccount.name
-output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
-output databaseName string = database.name
-output facesContainerName string = facesContainer.name
-output uploadsContainerName string = uploadsContainer.name
-output reviewsContainerName string = reviewsContainer.name
+output cosmosAccountId string = useExistingCosmosAccount ? existingCosmosAccount.id : cosmosAccount.id
+output cosmosAccountName string = effectiveCosmosAccountName
+output cosmosEndpoint string = useExistingCosmosAccount ? existingCosmosAccount!.properties.documentEndpoint : cosmosAccount!.properties.documentEndpoint
+output databaseName string = databaseName
+output facesContainerName string = facesContainerName
+output uploadsContainerName string = uploadsContainerName
+output reviewsContainerName string = reviewsContainerName

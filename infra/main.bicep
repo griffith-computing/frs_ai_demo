@@ -36,11 +36,47 @@ param entraClientSecret string
 @description('Client ID of the single-tenant Microsoft Entra application registration that represents the upload Function API.')
 param uploadApiClientId string
 
+@description('Set to true to reuse an existing storage account instead of provisioning a new one. The existing account must already exist in this resource group.')
+param useExistingStorageAccount bool = false
+
+@description('Name of the existing storage account to reuse. Required when useExistingStorageAccount is true; must be in this resource group.')
+param existingStorageAccountName string = ''
+
+@description('Set to true to reuse an existing Event Hubs namespace instead of provisioning a new one. The existing namespace must already exist in this resource group.')
+param useExistingEventHubNamespace bool = false
+
+@description('Name of the existing Event Hubs namespace to reuse. Required when useExistingEventHubNamespace is true; must be in this resource group.')
+param existingEventHubNamespaceName string = ''
+
+@description('Set to true to reuse an existing Cosmos DB account instead of provisioning a new one. The existing account must already exist in this resource group.')
+param useExistingCosmosAccount bool = false
+
+@description('Name of the existing Cosmos DB account to reuse. Required when useExistingCosmosAccount is true; must be in this resource group.')
+param existingCosmosAccountName string = ''
+
 @description('Set to true to reuse an existing Azure AI Face account instead of provisioning a new one. The existing account must already exist in this resource group.')
 param useExistingFaceAccount bool = false
 
 @description('Name of the existing Azure AI Face (Cognitive Services, kind=Face) account to reuse. Required when useExistingFaceAccount is true; must be in this resource group.')
 param existingFaceAccountName string = ''
+
+@description('Set to true to reuse an existing Function App and its App Service plan. Both resources must already exist in this resource group and match the deployment region.')
+param useExistingFunctionApp bool = false
+
+@description('Name of the existing Function App to reuse. Required when useExistingFunctionApp is true; must be in this resource group and deployment region.')
+param existingFunctionAppName string = ''
+
+@description('Name of the existing App Service plan used by the Function App. Required when useExistingFunctionApp is true; must be in this resource group and deployment region.')
+param existingFunctionAppPlanName string = ''
+
+@description('Set to true to reuse an existing Web App and its App Service plan. Both resources must already exist in this resource group and match the deployment region.')
+param useExistingWebApp bool = false
+
+@description('Name of the existing Web App to reuse. Required when useExistingWebApp is true; must be in this resource group and deployment region.')
+param existingWebAppName string = ''
+
+@description('Name of the existing App Service plan used by the Web App. Required when useExistingWebApp is true; must be in this resource group and deployment region.')
+param existingWebAppPlanName string = ''
 
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}st${suffix}')
@@ -83,6 +119,8 @@ module storage 'modules/storage.bicep' = {
   params: {
     storageAccountName: storageAccountName
     location: location
+    useExistingStorageAccount: useExistingStorageAccount
+    existingStorageAccountName: existingStorageAccountName
   }
 }
 
@@ -91,6 +129,8 @@ module eventHub 'modules/eventhub.bicep' = {
   params: {
     namespaceName: eventHubNamespaceName
     location: location
+    useExistingEventHubNamespace: useExistingEventHubNamespace
+    existingEventHubNamespaceName: existingEventHubNamespaceName
   }
 }
 
@@ -99,6 +139,8 @@ module cosmos 'modules/cosmos.bicep' = {
   params: {
     accountName: cosmosAccountName
     location: location
+    useExistingCosmosAccount: useExistingCosmosAccount
+    existingCosmosAccountName: existingCosmosAccountName
   }
 }
 
@@ -126,12 +168,12 @@ module privateEndpoints 'modules/privateendpoints.bicep' = {
     location: location
     privateEndpointSubnetId: network.outputs.privateEndpointSubnetId
     vnetId: network.outputs.vnetId
-    storageAccountId: resourceId('Microsoft.Storage/storageAccounts', storageAccountName)
-    storageAccountName: storageAccountName
-    eventHubNamespaceId: resourceId('Microsoft.EventHub/namespaces', eventHubNamespaceName)
-    eventHubNamespaceName: eventHubNamespaceName
-    cosmosAccountId: resourceId('Microsoft.DocumentDB/databaseAccounts', cosmosAccountName)
-    cosmosAccountName: cosmosAccountName
+    storageAccountId: storage.outputs.storageAccountId
+    storageAccountName: storage.outputs.storageAccountName
+    eventHubNamespaceId: eventHub.outputs.namespaceId
+    eventHubNamespaceName: eventHub.outputs.namespaceName
+    cosmosAccountId: cosmos.outputs.cosmosAccountId
+    cosmosAccountName: cosmos.outputs.cosmosAccountName
     faceAccountId: face.outputs.faceAccountId
     faceAccountName: face.outputs.faceAccountName
   }
@@ -148,6 +190,9 @@ module functionApp 'modules/functionapp.bicep' = {
   params: {
     functionAppName: functionAppName
     location: location
+    useExistingFunctionApp: useExistingFunctionApp
+    existingFunctionAppName: existingFunctionAppName
+    existingFunctionAppPlanName: existingFunctionAppPlanName
     storageAccountName: storage.outputs.storageAccountName
     appInsightsConnectionString: appInsights.outputs.appInsightsConnectionString
     userAssignedIdentityId: identity.outputs.identityId
@@ -186,6 +231,9 @@ module webApp 'modules/webapp.bicep' = {
   params: {
     webAppName: webAppName
     location: location
+    useExistingWebApp: useExistingWebApp
+    existingWebAppName: existingWebAppName
+    existingWebAppPlanName: existingWebAppPlanName
     userAssignedIdentityId: webIdentity.outputs.identityId
     userAssignedIdentityClientId: webIdentity.outputs.identityClientId
     integrationSubnetId: network.outputs.webIntegrationSubnetId
