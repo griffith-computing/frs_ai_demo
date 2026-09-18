@@ -18,6 +18,15 @@ param functionAppName string
 @description('Azure region for the Function App and related resources.')
 param location string
 
+@description('Set to true to reuse an existing Function App and App Service plan in this resource group and deployment region.')
+param useExistingFunctionApp bool = false
+
+@description('Name of the existing Function App to reuse. Required when useExistingFunctionApp is true.')
+param existingFunctionAppName string = ''
+
+@description('Name of the existing App Service plan used by the Function App. Required when useExistingFunctionApp is true.')
+param existingFunctionAppPlanName string = ''
+
 @description('Storage account name used for the Function App runtime (AzureWebJobsStorage) and photo blobs.')
 param storageAccountName string
 
@@ -70,9 +79,14 @@ param entraTenantId string
 param uploadApiClientId string
 
 var hostingPlanName = '${functionAppName}-plan'
+var effectiveFunctionAppName = useExistingFunctionApp ? existingFunctionAppName : functionAppName
 var uploadApiAudience = 'api://${uploadApiClientId}'
 
-resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
+resource existingHostingPlan 'Microsoft.Web/serverfarms@2023-01-01' existing = if (useExistingFunctionApp) {
+  name: existingFunctionAppPlanName
+}
+
+resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = if (!useExistingFunctionApp) {
   name: hostingPlanName
   location: location
   sku: {
@@ -88,7 +102,7 @@ resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 }
 
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
-  name: functionAppName
+  name: effectiveFunctionAppName
   location: location
   kind: 'functionapp'
   identity: {
@@ -98,7 +112,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
     }
   }
   properties: {
-    serverFarmId: hostingPlan.id
+    serverFarmId: useExistingFunctionApp ? existingHostingPlan.id : hostingPlan.id
     httpsOnly: true
     // No WEBSITE_CONTENTAZUREFILECONNECTIONSTRING/WEBSITE_CONTENTSHARE: Azure Files only
     // supports key-based auth, which this storage account (no shared key access) can't provide.

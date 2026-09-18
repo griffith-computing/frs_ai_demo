@@ -72,9 +72,11 @@ over **private networking** instead of the public internet:
 - A Private Endpoint + Private DNS zone per backend service
   (`privateendpoints.bicep`): Storage (blob/queue/table), Cosmos DB (`Sql`),
   Event Hub namespace (`namespace`), and the Face API (`account`).
-- Storage, Cosmos DB, the Event Hub namespace, and the Face API all have
-  `publicNetworkAccess: Disabled` — they're reachable only via the Private
-  Endpoints, from the Function App's integration subnet.
+- Storage, Cosmos DB, the Event Hub namespace, and the Face API are provisioned
+  with `publicNetworkAccess: Disabled`. Reused parents retain their existing
+  public-network settings; configure those resources separately if they must be
+  private-only. Application traffic still resolves through the Private
+  Endpoints from the apps' integration subnets.
 - The Function App has `virtualNetworkSubnetId` (regional VNet Integration)
   and `vnetRouteAllEnabled: true` so all outbound traffic — not just
   RFC1918 destinations — is routed through the VNet and resolves to the
@@ -177,6 +179,37 @@ secure value at deploy time (or via `entraClientSecret` in Key Vault reference).
 | `entraClientId` | **Yes** | — | Client ID of the reviewer web app's Entra registration. |
 | `entraClientSecret` | **Yes** (`@secure`) | — | Client secret of the Entra registration. Supply at deploy time; never commit it. |
 | `uploadApiClientId` | **Yes** | — | Client ID of the dedicated Entra app registration representing the upload Function API. |
+| `useExistingStorageAccount` | No | `false` | Set to `true` to reuse an existing storage account. |
+| `existingStorageAccountName` | Only if `useExistingStorageAccount=true` | — | Name of the existing storage account. |
+| `useExistingEventHubNamespace` | No | `false` | Set to `true` to reuse an existing Event Hubs namespace. |
+| `existingEventHubNamespaceName` | Only if `useExistingEventHubNamespace=true` | — | Name of the existing Event Hubs namespace. |
+| `useExistingCosmosAccount` | No | `false` | Set to `true` to reuse an existing Cosmos DB account. |
+| `existingCosmosAccountName` | Only if `useExistingCosmosAccount=true` | — | Name of the existing Cosmos DB account. |
+| `useExistingFaceAccount` | No | `false` | Set to `true` to reuse an existing Azure AI Face account instead of provisioning a new one. |
+| `existingFaceAccountName` | Only if `useExistingFaceAccount=true` | — | Name of the existing Azure AI Face (Cognitive Services, `kind=Face`) account to reuse. Must already exist in this same resource group. |
+| `useExistingFunctionApp` | No | `false` | Set to `true` to reuse an existing Function App and its App Service plan. |
+| `existingFunctionAppName` | Only if `useExistingFunctionApp=true` | — | Name of the existing Function App. |
+| `existingFunctionAppPlanName` | Only if `useExistingFunctionApp=true` | — | Name of the existing Function App's App Service plan. |
+| `useExistingWebApp` | No | `false` | Set to `true` to reuse an existing Web App and its App Service plan. |
+| `existingWebAppName` | Only if `useExistingWebApp=true` | — | Name of the existing Web App. |
+| `existingWebAppPlanName` | Only if `useExistingWebApp=true` | — | Name of the existing Web App's App Service plan. |
+
+All reused resources must already exist in the deployment resource group. The
+deployment principal must be able to configure them and create their private
+endpoint and role assignments. Reusing Storage requires a general-purpose v2
+account that supports Blob, Queue, and Table services, Private Link, and Entra
+ID data access. Reusing Event Hubs requires a Standard-or-higher namespace that
+supports Private Link and the configured consumer group. Reusing Cosmos DB
+requires an Azure Cosmos DB for NoSQL account.
+
+Reusing Storage, Event Hubs, or Cosmos DB keeps the parent resource but creates
+or reconciles the required `photos` container, event hub and consumer group, or
+database and containers. Existing parent network settings are not changed.
+Reusing an app keeps its existing plan but reconciles the app's identity, VNet
+integration, runtime, application settings, authentication, CORS, health check,
+and diagnostics as applicable. Existing apps and plans must be in the deployment
+region, compatible with the declared Windows Function App or Linux Web App
+configuration, and support VNet integration.
 
 ### Upload API Microsoft Entra setup
 
@@ -217,6 +250,25 @@ az deployment group create `
                uploadApiClientId=<upload-api-client-id>
 
 Remove-Variable entraSecretPlain
+```
+
+To reuse all supported resources, add the corresponding switches and names.
+The switches are independent, so the same parameters also support mixed
+create/reuse deployments:
+
+```powershell
+az deployment group create `
+  --resource-group rg-frs-ai-demo `
+  --template-file infra/main.bicep `
+  --parameters entraClientId=<application-client-id> `
+               entraClientSecret=$entraSecretPlain `
+               uploadApiClientId=<upload-api-client-id> `
+               useExistingStorageAccount=true existingStorageAccountName=<storage-account> `
+               useExistingEventHubNamespace=true existingEventHubNamespaceName=<event-hubs-namespace> `
+               useExistingCosmosAccount=true existingCosmosAccountName=<cosmos-account> `
+               useExistingFaceAccount=true existingFaceAccountName=<face-account> `
+               useExistingFunctionApp=true existingFunctionAppName=<function-app> existingFunctionAppPlanName=<function-plan> `
+               useExistingWebApp=true existingWebAppName=<web-app> existingWebAppPlanName=<web-plan>
 ```
 
 Validate templates without deploying (still requires the Entra parameters):

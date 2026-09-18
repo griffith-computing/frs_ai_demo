@@ -18,10 +18,22 @@ param storageAccountName string
 @description('Azure region for the storage account.')
 param location string
 
+@description('Set to true to reuse an existing storage account in this resource group.')
+param useExistingStorageAccount bool = false
+
+@description('Name of the existing storage account to reuse. Required when useExistingStorageAccount is true.')
+param existingStorageAccountName string = ''
+
 @description('Name of the blob container used to store uploaded photos.')
 param photosContainerName string = 'photos'
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+var effectiveStorageAccountName = useExistingStorageAccount ? existingStorageAccountName : storageAccountName
+
+resource existingStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = if (useExistingStorageAccount) {
+  name: existingStorageAccountName
+}
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = if (!useExistingStorageAccount) {
   name: storageAccountName
   location: location
   sku: {
@@ -42,8 +54,11 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
-  parent: storageAccount
-  name: 'default'
+  name: '${effectiveStorageAccountName}/default'
+  dependsOn: [
+    existingStorageAccount
+    storageAccount
+  ]
 }
 
 resource photosContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
@@ -54,6 +69,6 @@ resource photosContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
-output storageAccountId string = storageAccount.id
-output storageAccountName string = storageAccount.name
-output blobEndpoint string = storageAccount.properties.primaryEndpoints.blob
+output storageAccountId string = useExistingStorageAccount ? existingStorageAccount.id : storageAccount.id
+output storageAccountName string = effectiveStorageAccountName
+output blobEndpoint string = useExistingStorageAccount ? existingStorageAccount!.properties.primaryEndpoints.blob : storageAccount!.properties.primaryEndpoints.blob
