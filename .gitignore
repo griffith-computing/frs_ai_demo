@@ -22,6 +22,11 @@ benchmark/reports/
 *.ckpt
 *.pkl
 
+## Face Lab desktop test bench local database (scratch data, never commit)
+*.db
+*.db-shm
+*.db-wal
+
 ## Azurite local storage emulator data
 .azurite/
 __azurite_db_*.json

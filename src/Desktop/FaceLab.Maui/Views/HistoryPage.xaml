@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FaceLab.Maui.Views.HistoryPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:FaceLab.Maui.ViewModels"
+    x:DataType="vm:HistoryViewModel"
+    Title="History">
+
+    <Grid Padding="20" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+
+        <Label Grid.Row="0" FontSize="20" FontAttributes="Bold" Text="Past runs" />
+        <Label
+            Grid.Row="1"
+            FontSize="12"
+            TextColor="Gray"
+            Text="Every run is stored locally with the exact configuration it used. Select a run to inspect the raw Face API calls." />
+
+        <HorizontalStackLayout Grid.Row="2" Spacing="8">
+            <Button Command="{Binding LoadCommand}" Text="Refresh" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" VerticalOptions="Center" />
+            <Label Text="{Binding StatusMessage}" VerticalOptions="Center" />
+        </HorizontalStackLayout>
+
+        <CollectionView
+            Grid.Row="3"
+            ItemsSource="{Binding Runs}"
+            SelectionChanged="OnRunSelected"
+            SelectionMode="Single">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:RunSummary">
+                    <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">
+                        <VerticalStackLayout Spacing="4">
+                            <Label FontAttributes="Bold" Text="{Binding Headline}" />
+                            <Label FontFamily="Consolas" FontSize="12" Text="{Binding Detail}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
+</ContentPage>
