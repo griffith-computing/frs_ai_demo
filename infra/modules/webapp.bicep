@@ -76,6 +76,18 @@ param eventHubFullyQualifiedNamespace string
 @description('Event Hub name.')
 param eventHubName string
 
+@description('Enables browser batch upload and allowlisted storage import.')
+param bulkUploadsEnabled bool = false
+
+@description('Maximum number of files accepted in one browser batch.')
+param bulkUploadsMaxFiles int = 100
+
+@description('Maximum number of concurrent browser upload requests.')
+param bulkUploadsMaxConcurrency int = 3
+
+@description('Allowlisted storage import source objects serialized into BulkUploads__SourcesJson.')
+param bulkUploadSources array = []
+
 var planName = '${webAppName}-plan'
 var effectiveWebAppName = useExistingWebApp ? existingWebAppName : webAppName
 
@@ -141,6 +153,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'EventHub__FullyQualifiedNamespace', value: eventHubFullyQualifiedNamespace }
         { name: 'EventHub__Name', value: eventHubName }
         { name: 'Uploads__MaxBytes', value: '6291456' }
+        { name: 'BulkUploads__Enabled', value: string(bulkUploadsEnabled) }
+        { name: 'BulkUploads__MaxFiles', value: string(bulkUploadsMaxFiles) }
+        { name: 'BulkUploads__MaxConcurrency', value: string(bulkUploadsMaxConcurrency) }
+        { name: 'BulkUploads__SourcesJson', value: string(bulkUploadSources) }
       ]
     }
   }

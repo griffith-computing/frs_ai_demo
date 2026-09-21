@@ -1,0 +1,74 @@
+@*
+----------------------------------------------------------------------------------
+ THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
+ EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES
+ OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
+
+ Copyright (c) Microsoft Corporation. All rights reserved.
+----------------------------------------------------------------------------------
+*@
+
+@page "{id}"
+@model BatchStatusModel
+@{
+    ViewData["Title"] = "Batch status";
+}
+
+<section class="page-heading compact">
+    <div>
+        <p class="eyebrow">Batch analysis</p>
+        <h1>Processing progress</h1>
+        <p class="mono">@Model.Batch.Id</p>
+    </div>
+</section>
+
+<section class="batch-status" data-complete="false">
+    <div class="progress-track determinate"><span style="width: @Model.Counts.ProgressPercent%"></span></div>
+    <div class="status-counts">
+        <div><strong id="queued">@Model.Counts.Queued</strong><span>Queued</span></div>
+        <div><strong id="processing">@Model.Counts.Processing</strong><span>Processing</span></div>
+        <div><strong id="completed">@Model.Counts.Completed</strong><span>Completed</span></div>
+        <div><strong id="failed">@Model.Counts.Failed</strong><span>Failed</span></div>
+        <div><strong id="noFaces">@Model.Counts.NoFaces</strong><span>No face</span></div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>File</th><th>Status</th><th>Faces</th><th>Detail</th></tr></thead>
+            <tbody id="uploads"></tbody>
+        </table>
+    </div>
+    <div class="status-actions">
+        <a class="button secondary" asp-page="/Upload">Start another</a>
+        <a class="button" asp-page="/Index">Browse results</a>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+const panel = document.querySelector('.batch-status');
+const body = document.getElementById('uploads');
+function textCell(row, value) {
+    const cell = row.insertCell();
+    cell.textContent = value ?? '';
+}
+async function refresh() {
+    const response = await fetch('?handler=State', { headers: { Accept: 'application/json' } });
+    if (!response.ok) return;
+    const state = await response.json();
+    for (const key of ['queued', 'processing', 'completed', 'failed', 'noFaces']) {
+        document.getElementById(key).textContent = state.counts[key];
+    }
+    panel.querySelector('.progress-track span').style.width = `${state.counts.progressPercent}%`;
+    body.replaceChildren();
+    for (const upload of state.uploads) {
+        const row = body.insertRow();
+        textCell(row, upload.originalFileName || upload.id);
+        textCell(row, upload.status);
+        textCell(row, upload.detectedFaceCount);
+        textCell(row, upload.failureSummary);
+    }
+    if (!state.complete) window.setTimeout(refresh, 2000);
+}
+refresh();
+</script>
+}

@@ -78,6 +78,21 @@ param entraTenantId string
 @description('Client ID of the Microsoft Entra application registration representing this Function API.')
 param uploadApiClientId string
 
+@description('Enables allowlisted storage imports.')
+param bulkUploadsEnabled bool = false
+
+@description('Maximum browser batch size, shared with the web app for consistent configuration.')
+param bulkUploadsMaxFiles int = 100
+
+@description('Maximum browser upload concurrency, shared with the web app for consistent configuration.')
+param bulkUploadsMaxConcurrency int = 3
+
+@description('Allowlisted storage import source objects serialized into BulkUploads__SourcesJson.')
+param bulkUploadSources array = []
+
+@description('Timer schedule used to process storage imports, in NCRONTAB format.')
+param bulkUploadsImportSchedule string = '0 */1 * * * *'
+
 var hostingPlanName = '${functionAppName}-plan'
 var effectiveFunctionAppName = useExistingFunctionApp ? existingFunctionAppName : functionAppName
 var uploadApiAudience = 'api://${uploadApiClientId}'
@@ -212,6 +227,26 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'FaceApi__DynamicPersonGroupId'
           value: dynamicPersonGroupId
+        }
+        {
+          name: 'BulkUploads__Enabled'
+          value: string(bulkUploadsEnabled)
+        }
+        {
+          name: 'BulkUploads__MaxFiles'
+          value: string(bulkUploadsMaxFiles)
+        }
+        {
+          name: 'BulkUploads__MaxConcurrency'
+          value: string(bulkUploadsMaxConcurrency)
+        }
+        {
+          name: 'BulkUploads__SourcesJson'
+          value: string(bulkUploadSources)
+        }
+        {
+          name: 'BulkUploadsImportSchedule'
+          value: bulkUploadsImportSchedule
         }
       ]
     }

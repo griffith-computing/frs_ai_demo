@@ -24,7 +24,13 @@ namespace FrsAiDemo.WebApp.Services;
 
 public interface IUploadService
 {
-    Task<UploadAccepted> UploadAsync(IFormFile photo, CancellationToken cancellationToken);
+    Task<UploadAccepted> UploadAsync(
+        IFormFile photo,
+        CancellationToken cancellationToken,
+        string? batchId = null,
+        string? importId = null,
+        string? originalFileName = null);
+    Task RecordFailedUploadAsync(string batchId, string originalFileName, string failureSummary, CancellationToken cancellationToken);
 }
 
 public sealed record UploadAccepted(string UploadId);
@@ -53,7 +59,12 @@ public sealed class UploadService : IUploadService
         _maxBytes = configuration.GetValue<long?>("Uploads:MaxBytes") ?? 6 * 1024 * 1024;
     }
 
-    public async Task<UploadAccepted> UploadAsync(IFormFile photo, CancellationToken cancellationToken)
+    public async Task<UploadAccepted> UploadAsync(
+        IFormFile photo,
+        CancellationToken cancellationToken,
+        string? batchId = null,
+        string? importId = null,
+        string? originalFileName = null)
     {
         if (photo.Length == 0 || photo.Length > _maxBytes)
         {
@@ -97,7 +108,10 @@ public sealed class UploadService : IUploadService
             BlobUrl = blobClient.Uri.ToString(),
             ContentType = contentType,
             CreatedUtc = now,
-            UpdatedUtc = now
+            UpdatedUtc = now,
+            BatchId = batchId,
+            ImportId = importId,
+            OriginalFileName = originalFileName ?? Path.GetFileName(photo.FileName)
         }, cancellationToken);
 
         var uploadEvent = new
@@ -125,5 +139,28 @@ public sealed class UploadService : IUploadService
         }
 
         return new UploadAccepted(uploadId);
+    }
+
+    public async Task RecordFailedUploadAsync(
+        string batchId,
+        string originalFileName,
+        string failureSummary,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _repository.CreateUploadAsync(new UploadRecord
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Status = "Failed",
+            ContainerName = _containerName,
+            BlobName = string.Empty,
+            BlobUrl = string.Empty,
+            ContentType = string.Empty,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            BatchId = batchId,
+            OriginalFileName = Path.GetFileName(originalFileName),
+            FailureSummary = failureSummary
+        }, cancellationToken);
     }
 }

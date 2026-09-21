@@ -74,15 +74,22 @@ public sealed class ProcessPhotoFunction
 
         logger.LogInformation("Processing photo {BlobName} from upload {UploadId}", uploadEvent.BlobName, uploadEvent.UploadId);
 
+        var leaseOwner = Guid.NewGuid().ToString("N");
+        if (!await _uploadRepository.TrySetProcessingAsync(uploadEvent.UploadId, leaseOwner, cancellationToken))
+        {
+            var current = await _uploadRepository.GetAsync(uploadEvent.UploadId, cancellationToken);
+            if (current?.Status == UploadStatuses.Processing)
+            {
+                throw new InvalidOperationException(
+                    $"Upload {uploadEvent.UploadId} is already processing and will be retried after its lease expires.");
+            }
+            logger.LogInformation("Skipping duplicate terminal event for upload {UploadId}", uploadEvent.UploadId);
+            return;
+        }
+
         try
         {
-            await _uploadRepository.SetStatusAsync(
-                uploadEvent.UploadId,
-                UploadStatuses.Processing,
-                detectedFaceCount: null,
-                failureSummary: null,
-                cancellationToken);
-            await ProcessUploadEventAsync(uploadEvent, cancellationToken);
+            await ProcessUploadEventAsync(uploadEvent, cancellationToken, leaseOwner);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -97,7 +104,8 @@ public sealed class ProcessPhotoFunction
                     UploadStatuses.Failed,
                     detectedFaceCount: null,
                     failureSummary: "Photo analysis failed.",
-                    CancellationToken.None);
+                    CancellationToken.None,
+                    leaseOwner);
             }
             catch (Exception statusException)
             {
@@ -111,12 +119,19 @@ public sealed class ProcessPhotoFunction
         }
     }
 
-    internal async Task ProcessUploadEventAsync(PhotoUploadedEvent uploadEvent, CancellationToken cancellationToken)
+    internal async Task ProcessUploadEventAsync(
+        PhotoUploadedEvent uploadEvent,
+        CancellationToken cancellationToken,
+        string? leaseOwner = null)
     {
         await _faceApiService.EnsureDynamicPersonGroupExistsAsync(cancellationToken);
 
         // StreamContent owns and disposes its input, so each Face API request needs a fresh stream.
-        await using var photoStream = await _blobStorageService.DownloadPhotoAsync(uploadEvent.ContainerName, uploadEvent.BlobName, cancellationToken);
+        await using var photoStream = await _blobStorageService.DownloadPhotoAsync(
+            uploadEvent.ContainerName,
+            uploadEvent.BlobName,
+            cancellationToken,
+            uploadEvent.StorageAccountName);
         using var buffered = new MemoryStream();
         await photoStream.CopyToAsync(buffered, cancellationToken);
         var photoBytes = buffered.ToArray();
@@ -132,7 +147,8 @@ public sealed class ProcessPhotoFunction
                 UploadStatuses.NoFaces,
                 detectedFaces.Count,
                 failureSummary: null,
-                cancellationToken);
+                cancellationToken,
+                leaseOwner);
             return;
         }
 
@@ -142,6 +158,13 @@ public sealed class ProcessPhotoFunction
 
         foreach (var face in detectedFaces)
         {
+            if (leaseOwner is not null)
+            {
+                await _uploadRepository.RenewProcessingLeaseAsync(
+                    uploadEvent.UploadId,
+                    leaseOwner,
+                    cancellationToken);
+            }
             if (face.FaceId is null)
             {
                 continue;
@@ -175,7 +198,8 @@ public sealed class ProcessPhotoFunction
             UploadStatuses.Completed,
             detectedFaces.Count,
             failureSummary: null,
-            cancellationToken);
+            cancellationToken,
+            leaseOwner);
     }
 
     private async Task RegisterNewPersonAsync(

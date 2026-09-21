@@ -79,6 +79,19 @@ public sealed class AuthenticationTests : IClassFixture<ReviewerWebApplicationFa
     }
 
     [Fact]
+    public async Task Upload_BulkDisabledByDefault_PreservesSinglePhotoExperience()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Test", "Reviewer");
+
+        var body = await client.GetStringAsync("/Upload");
+
+        Assert.Contains("Upload a photo", body);
+        Assert.DoesNotContain("Import a storage container", body);
+        Assert.DoesNotContain("Queue selected photos", body);
+    }
+
+    [Fact]
     public async Task UploadStatus_NoFaces_DisplaysRequiredMessage()
     {
         using var noFacesFactory = _factory.WithWebHostBuilder(builder =>
@@ -137,6 +150,58 @@ public sealed class AuthenticationTests : IClassFixture<ReviewerWebApplicationFa
 
         Assert.Contains("6 MB", exception.Message);
     }
+
+    [Fact]
+    public void UploadStatusCounts_SeparatesEveryRequiredState()
+    {
+        var uploads = new[]
+        {
+            CreateUpload("Queued"),
+            CreateUpload("Processing"),
+            CreateUpload("Completed"),
+            CreateUpload("Failed"),
+            CreateUpload("NoFaces")
+        };
+
+        var counts = UploadStatusCounts.From(uploads);
+
+        Assert.Equal(5, counts.Total);
+        Assert.Equal(1, counts.Queued);
+        Assert.Equal(1, counts.Processing);
+        Assert.Equal(1, counts.Completed);
+        Assert.Equal(1, counts.Failed);
+        Assert.Equal(1, counts.NoFaces);
+        Assert.Equal(60, counts.ProgressPercent);
+    }
+
+    [Fact]
+    public void BulkUploadOptions_ParsesAllowlistedSources()
+    {
+        var options = new BulkUploadOptions
+        {
+            SourcesJson = """
+                [{"key":"history","displayName":"Historical photos","accountName":"sourceacct","containerName":"photos","allowCopy":true,"allowInPlace":true}]
+                """
+        };
+
+        var source = Assert.Single(options.GetSources());
+
+        Assert.Equal("history", source.Key);
+        Assert.True(source.AllowCopy);
+        Assert.True(source.AllowInPlace);
+    }
+
+    private static UploadRecord CreateUpload(string status) => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Status = status,
+        ContainerName = "photos",
+        BlobName = "photo.jpg",
+        BlobUrl = "https://storage.test/photos/photo.jpg",
+        ContentType = "image/jpeg",
+        CreatedUtc = DateTimeOffset.UtcNow,
+        UpdatedUtc = DateTimeOffset.UtcNow
+    };
 
     private sealed class StaticTokenCredential : TokenCredential
     {
@@ -215,7 +280,21 @@ public sealed class EmptyFaceReviewRepository : IFaceReviewRepository
     public Task<FaceRecord?> GetPersonAsync(string personId, CancellationToken cancellationToken) => Task.FromResult<FaceRecord?>(null);
     public Task<UploadRecord?> GetUploadAsync(string uploadId, CancellationToken cancellationToken) =>
         Task.FromResult(_upload?.Id == uploadId ? _upload : null);
+    public Task<UploadBatchRecord?> GetBatchAsync(string batchId, CancellationToken cancellationToken) => Task.FromResult<UploadBatchRecord?>(null);
+    public Task<StorageImportRecord?> GetImportAsync(string importId, CancellationToken cancellationToken) => Task.FromResult<StorageImportRecord?>(null);
+    public Task<IReadOnlyList<UploadRecord>> GetBatchUploadsAsync(string batchId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<UploadRecord>>([]);
+    public Task<IReadOnlyList<UploadBatchRecord>> GetImportBatchesAsync(string importId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<UploadBatchRecord>>([]);
+    public Task<IReadOnlyList<UploadRecord>> GetImportUploadsAsync(string importId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<UploadRecord>>([]);
+    public Task<UploadStatusCounts> GetImportStatusCountsAsync(string importId, CancellationToken cancellationToken) =>
+        Task.FromResult(new UploadStatusCounts(0, 0, 0, 0, 0, 0));
     public Task CreateUploadAsync(UploadRecord upload, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task CreateBatchAsync(UploadBatchRecord batch, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task<bool> TryReserveBatchSlotAsync(string batchId, CancellationToken cancellationToken) => Task.FromResult(true);
+    public Task CompleteBatchSubmissionAsync(string batchId, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task CreateImportAsync(StorageImportRecord import, CancellationToken cancellationToken) => Task.CompletedTask;
     public Task SetUploadStatusAsync(string uploadId, string status, string? failureSummary, CancellationToken cancellationToken) => Task.CompletedTask;
     public Task<ReviewRecord?> GetReviewAsync(string personId, string sightingKey, string reviewerObjectId, CancellationToken cancellationToken) => Task.FromResult<ReviewRecord?>(null);
     public Task<ReviewRecord> UpsertReviewAsync(ReviewInput input, string reviewerObjectId, string reviewerName, CancellationToken cancellationToken) => throw new NotSupportedException();

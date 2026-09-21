@@ -15,6 +15,7 @@
 using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using Azure.Messaging.EventHubs.Producer;
 using FrsAiDemo.FunctionApp.Services;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -52,6 +53,15 @@ var host = new HostBuilder()
             }
             var blobServiceUri = new Uri($"https://{storageAccountName}.blob.core.windows.net");
             return new BlobServiceClient(blobServiceUri, credential);
+        });
+
+        services.AddSingleton(_ =>
+        {
+            var fullyQualifiedNamespace = configuration["EventHub:FullyQualifiedNamespace"]
+                ?? configuration["EventHub:fullyQualifiedNamespace"]
+                ?? throw new InvalidOperationException("EventHub:FullyQualifiedNamespace is required.");
+            var eventHubName = configuration["EventHub:Name"] ?? configuration["EventHubName"] ?? "photo-events";
+            return new EventHubProducerClient(fullyQualifiedNamespace, eventHubName, credential);
         });
 
         var cosmosEndpoint = configuration["CosmosDb:Endpoint"];

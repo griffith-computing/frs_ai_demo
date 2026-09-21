@@ -40,6 +40,7 @@ public sealed class FaceRecord
 public sealed class UploadRecord
 {
     public required string Id { get; init; }
+    public string DocumentType { get; init; } = "upload";
     public required string Status { get; init; }
     public required string ContainerName { get; init; }
     public required string BlobName { get; init; }
@@ -49,6 +50,72 @@ public sealed class UploadRecord
     public DateTimeOffset UpdatedUtc { get; init; }
     public int? DetectedFaceCount { get; init; }
     public string? FailureSummary { get; init; }
+    public string? BatchId { get; init; }
+    public string? ImportId { get; init; }
+    public string? OriginalFileName { get; init; }
+    public string? SourceAccountName { get; init; }
+}
+
+public sealed class StatusCountResult
+{
+    public required string Status { get; init; }
+    public int Count { get; init; }
+}
+
+public sealed class UploadBatchRecord
+{
+    public required string Id { get; init; }
+    public string DocumentType { get; init; } = "batch";
+    public string? ImportId { get; init; }
+    public required string OwnerObjectId { get; init; }
+    public int ExpectedFileCount { get; init; }
+    public int SubmittedFileCount { get; init; }
+    public bool SubmissionCompleted { get; init; }
+    public DateTimeOffset CreatedUtc { get; init; }
+    public DateTimeOffset UpdatedUtc { get; init; }
+}
+
+public sealed class StorageImportRecord
+{
+    public required string Id { get; init; }
+    public string DocumentType { get; init; } = "import";
+    public required string OwnerObjectId { get; init; }
+    public required string SourceKey { get; init; }
+    public required string SourceAccountName { get; init; }
+    public required string SourceContainerName { get; init; }
+    public required string Mode { get; init; }
+    public string Status { get; init; } = "Pending";
+    public string? ContinuationToken { get; init; }
+    public int NextBatchNumber { get; init; }
+    public int DiscoveredFileCount { get; init; }
+    public int ConsecutiveFailureCount { get; init; }
+    public string? FailureSummary { get; init; }
+    public DateTimeOffset CreatedUtc { get; init; }
+    public DateTimeOffset UpdatedUtc { get; init; }
+}
+
+public sealed record UploadStatusCounts(
+    int Total,
+    int Queued,
+    int Processing,
+    int Completed,
+    int Failed,
+    int NoFaces)
+{
+    public int Terminal => Completed + Failed + NoFaces;
+    public int ProgressPercent => Total == 0 ? 0 : (int)Math.Round(Terminal * 100d / Total);
+
+    public static UploadStatusCounts From(IEnumerable<UploadRecord> uploads)
+    {
+        var items = uploads.ToList();
+        return new UploadStatusCounts(
+            items.Count,
+            items.Count(x => x.Status == "Queued"),
+            items.Count(x => x.Status == "Processing"),
+            items.Count(x => x.Status == "Completed"),
+            items.Count(x => x.Status == "Failed"),
+            items.Count(x => x.Status == "NoFaces"));
+    }
 }
 
 public enum ReviewDecision

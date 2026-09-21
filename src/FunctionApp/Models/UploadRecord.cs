@@ -30,6 +30,9 @@ public sealed class UploadRecord
     [JsonPropertyName("id")]
     public required string Id { get; init; }
 
+    [JsonPropertyName("documentType")]
+    public string DocumentType { get; init; } = "upload";
+
     [JsonPropertyName("status")]
     public required string Status { get; set; }
 
@@ -56,4 +59,78 @@ public sealed class UploadRecord
 
     [JsonPropertyName("failureSummary")]
     public string? FailureSummary { get; set; }
+
+    [JsonPropertyName("processingLeaseUntilUtc")]
+    public DateTimeOffset? ProcessingLeaseUntilUtc { get; set; }
+
+    [JsonPropertyName("processingLeaseOwner")]
+    public string? ProcessingLeaseOwner { get; set; }
+
+    [JsonPropertyName("batchId")]
+    public string? BatchId { get; init; }
+
+    [JsonPropertyName("importId")]
+    public string? ImportId { get; init; }
+
+    [JsonPropertyName("originalFileName")]
+    public string? OriginalFileName { get; init; }
+
+    [JsonPropertyName("sourceAccountName")]
+    public string? SourceAccountName { get; init; }
+}
+
+public sealed class UploadBatchRecord
+{
+    [JsonPropertyName("id")]
+    public required string Id { get; init; }
+    [JsonPropertyName("documentType")]
+    public string DocumentType { get; init; } = "batch";
+    [JsonPropertyName("importId")]
+    public string? ImportId { get; init; }
+    [JsonPropertyName("ownerObjectId")]
+    public required string OwnerObjectId { get; init; }
+    [JsonPropertyName("expectedFileCount")]
+    public int ExpectedFileCount { get; init; }
+    [JsonPropertyName("submittedFileCount")]
+    public int SubmittedFileCount { get; init; }
+    [JsonPropertyName("submissionCompleted")]
+    public bool SubmissionCompleted { get; set; }
+    [JsonPropertyName("createdUtc")]
+    public DateTimeOffset CreatedUtc { get; init; }
+    [JsonPropertyName("updatedUtc")]
+    public DateTimeOffset UpdatedUtc { get; set; }
+}
+
+public sealed class StorageImportRecord
+{
+    [JsonPropertyName("id")]
+    public required string Id { get; init; }
+    [JsonPropertyName("documentType")]
+    public string DocumentType { get; init; } = "import";
+    [JsonPropertyName("ownerObjectId")]
+    public required string OwnerObjectId { get; init; }
+    [JsonPropertyName("sourceKey")]
+    public required string SourceKey { get; init; }
+    [JsonPropertyName("sourceAccountName")]
+    public required string SourceAccountName { get; init; }
+    [JsonPropertyName("sourceContainerName")]
+    public required string SourceContainerName { get; init; }
+    [JsonPropertyName("mode")]
+    public required string Mode { get; init; }
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "Pending";
+    [JsonPropertyName("continuationToken")]
+    public string? ContinuationToken { get; set; }
+    [JsonPropertyName("nextBatchNumber")]
+    public int NextBatchNumber { get; set; }
+    [JsonPropertyName("discoveredFileCount")]
+    public int DiscoveredFileCount { get; set; }
+    [JsonPropertyName("consecutiveFailureCount")]
+    public int ConsecutiveFailureCount { get; set; }
+    [JsonPropertyName("failureSummary")]
+    public string? FailureSummary { get; set; }
+    [JsonPropertyName("createdUtc")]
+    public DateTimeOffset CreatedUtc { get; init; }
+    [JsonPropertyName("updatedUtc")]
+    public DateTimeOffset UpdatedUtc { get; set; }
 }

@@ -113,6 +113,16 @@ textarea { resize: vertical; margin-bottom: 12px; }
 .status-panel[data-status="Completed"] .progress-track span, .status-panel[data-status="NoFaces"] .progress-track span { width: 100%; animation: none; }
 .status-panel[data-status="Failed"] .progress-track span { width: 100%; animation: none; background: var(--coral); }
 .status-actions { display: flex; justify-content: center; gap: 12px; margin-top: 28px; }
+.progress-track.determinate span { transform: none; animation: none; transition: width .2s ease; }
+.status-counts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 24px 0; }
+.status-counts div { padding: 18px 10px; background: var(--surface); border-top: 3px solid var(--teal); text-align: center; }
+.status-counts strong, .status-counts span { display: block; }
+.status-counts strong { font-size: 1.7rem; }
+.status-counts span { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
+.storage-import-panel { max-width: 760px; margin-top: 48px; padding: 28px; background: var(--surface); border-top: 3px solid var(--teal); }
+.storage-import-form { display: grid; gap: 14px; margin-top: 20px; }
+.storage-import-form select { padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
+.batch-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
 @keyframes progress { to { transform: translateX(185%); } }
 @media (max-width: 780px) {
     .app-header { grid-template-columns: 1fr auto; padding: 12px 4vw; }
@@ -125,6 +135,7 @@ textarea { resize: vertical; margin-bottom: 12px; }
     .photo-frame { min-height: 240px; }
     .empty-state, .status-panel { padding: 36px 20px; }
     th, td { padding: 12px; }
+    .status-counts { grid-template-columns: repeat(2, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
     .progress-track span { animation: none; }

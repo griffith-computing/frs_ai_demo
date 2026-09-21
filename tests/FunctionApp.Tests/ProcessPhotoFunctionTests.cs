@@ -125,7 +125,11 @@ public sealed class ProcessPhotoFunctionTests
         public Task<string> UploadPhotoAsync(string blobName, Stream content, string contentType, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<Stream> DownloadPhotoAsync(string containerName, string blobName, CancellationToken cancellationToken) =>
+        public Task<Stream> DownloadPhotoAsync(
+            string containerName,
+            string blobName,
+            CancellationToken cancellationToken,
+            string? storageAccountName = null) =>
             Task.FromResult<Stream>(new MemoryStream([1, 2, 3]));
 
         public Task UploadPoisonMessageAsync(string blobName, string content, CancellationToken cancellationToken) =>
@@ -219,12 +223,21 @@ public sealed class ProcessPhotoFunctionTests
         public Task<UploadRecord> CreateAsync(UploadRecord upload, CancellationToken cancellationToken) =>
             Task.FromResult(upload);
 
+        public Task<bool> TryCreateAsync(UploadRecord upload, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<UploadRecord?> GetAsync(string uploadId, CancellationToken cancellationToken) => Task.FromResult<UploadRecord?>(null);
+        public Task<bool> TrySetProcessingAsync(string uploadId, string leaseOwner, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task RenewProcessingLeaseAsync(string uploadId, string leaseOwner, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<StorageImportRecord?> GetNextImportAsync(CancellationToken cancellationToken) => Task.FromResult<StorageImportRecord?>(null);
+        public Task CreateBatchAsync(UploadBatchRecord batch, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UpdateImportAsync(StorageImportRecord import, CancellationToken cancellationToken) => Task.CompletedTask;
+
         public Task SetStatusAsync(
             string uploadId,
             string status,
             int? detectedFaceCount,
             string? failureSummary,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? leaseOwner = null)
         {
             Statuses.Add((status, detectedFaceCount));
             return Task.CompletedTask;
