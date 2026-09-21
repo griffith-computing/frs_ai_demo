@@ -22,7 +22,17 @@ public interface IFaceReviewRepository
     Task<PageResult<FaceRecord>> GetPeopleAsync(int pageSize, string? continuationToken, CancellationToken cancellationToken);
     Task<FaceRecord?> GetPersonAsync(string personId, CancellationToken cancellationToken);
     Task<UploadRecord?> GetUploadAsync(string uploadId, CancellationToken cancellationToken);
+    Task<UploadBatchRecord?> GetBatchAsync(string batchId, CancellationToken cancellationToken);
+    Task<StorageImportRecord?> GetImportAsync(string importId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UploadRecord>> GetBatchUploadsAsync(string batchId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UploadBatchRecord>> GetImportBatchesAsync(string importId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UploadRecord>> GetImportUploadsAsync(string importId, CancellationToken cancellationToken);
+    Task<UploadStatusCounts> GetImportStatusCountsAsync(string importId, CancellationToken cancellationToken);
     Task CreateUploadAsync(UploadRecord upload, CancellationToken cancellationToken);
+    Task CreateBatchAsync(UploadBatchRecord batch, CancellationToken cancellationToken);
+    Task<bool> TryReserveBatchSlotAsync(string batchId, CancellationToken cancellationToken);
+    Task CompleteBatchSubmissionAsync(string batchId, CancellationToken cancellationToken);
+    Task CreateImportAsync(StorageImportRecord import, CancellationToken cancellationToken);
     Task SetUploadStatusAsync(string uploadId, string status, string? failureSummary, CancellationToken cancellationToken);
     Task<ReviewRecord?> GetReviewAsync(string personId, string sightingKey, string reviewerObjectId, CancellationToken cancellationToken);
     Task<ReviewRecord> UpsertReviewAsync(ReviewInput input, string reviewerObjectId, string reviewerName, CancellationToken cancellationToken);
@@ -78,9 +88,97 @@ public sealed class CosmosFaceReviewRepository : IFaceReviewRepository
         }
     }
 
+    public Task<UploadBatchRecord?> GetBatchAsync(string batchId, CancellationToken cancellationToken) =>
+        ReadAsync<UploadBatchRecord>(batchId, cancellationToken);
+
+    public Task<StorageImportRecord?> GetImportAsync(string importId, CancellationToken cancellationToken) =>
+        ReadAsync<StorageImportRecord>(importId, cancellationToken);
+
+    public Task<IReadOnlyList<UploadRecord>> GetBatchUploadsAsync(string batchId, CancellationToken cancellationToken) =>
+        QueryAsync<UploadRecord>(
+            new QueryDefinition("SELECT * FROM c WHERE c.documentType = 'upload' AND c.batchId = @batchId")
+                .WithParameter("@batchId", batchId),
+            cancellationToken);
+
+    public Task<IReadOnlyList<UploadBatchRecord>> GetImportBatchesAsync(string importId, CancellationToken cancellationToken) =>
+        QueryAsync<UploadBatchRecord>(
+            new QueryDefinition("SELECT * FROM c WHERE c.documentType = 'batch' AND c.importId = @importId ORDER BY c.createdUtc")
+                .WithParameter("@importId", importId),
+            cancellationToken);
+
+    public Task<IReadOnlyList<UploadRecord>> GetImportUploadsAsync(string importId, CancellationToken cancellationToken) =>
+        QueryAsync<UploadRecord>(
+            new QueryDefinition("SELECT * FROM c WHERE c.documentType = 'upload' AND c.importId = @importId")
+                .WithParameter("@importId", importId),
+            cancellationToken);
+
+    public async Task<UploadStatusCounts> GetImportStatusCountsAsync(string importId, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync<StatusCountResult>(
+            new QueryDefinition(
+                    "SELECT c.status, COUNT(1) AS count FROM c WHERE c.documentType = 'upload' AND c.importId = @importId GROUP BY c.status")
+                .WithParameter("@importId", importId),
+            cancellationToken);
+        var counts = rows.ToDictionary(x => x.Status, x => x.Count, StringComparer.Ordinal);
+        int Get(string status) => counts.GetValueOrDefault(status);
+        return new UploadStatusCounts(
+            rows.Sum(x => x.Count),
+            Get("Queued"),
+            Get("Processing"),
+            Get("Completed"),
+            Get("Failed"),
+            Get("NoFaces"));
+    }
+
     public async Task CreateUploadAsync(UploadRecord upload, CancellationToken cancellationToken)
     {
         await _uploads.CreateItemAsync(upload, new PartitionKey(upload.Id), cancellationToken: cancellationToken);
+    }
+
+    public async Task CreateBatchAsync(UploadBatchRecord batch, CancellationToken cancellationToken)
+    {
+        await _uploads.CreateItemAsync(batch, new PartitionKey(batch.Id), cancellationToken: cancellationToken);
+    }
+
+    public async Task<bool> TryReserveBatchSlotAsync(string batchId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _uploads.PatchItemAsync<UploadBatchRecord>(
+                batchId,
+                new PartitionKey(batchId),
+                [
+                    PatchOperation.Increment("/submittedFileCount", 1),
+                    PatchOperation.Set("/updatedUtc", DateTimeOffset.UtcNow)
+                ],
+                new PatchItemRequestOptions
+                {
+                    FilterPredicate = "FROM c WHERE c.submissionCompleted = false AND c.submittedFileCount < c.expectedFileCount"
+                },
+                cancellationToken);
+            return true;
+        }
+        catch (CosmosException exception) when (exception.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            return false;
+        }
+    }
+
+    public async Task CompleteBatchSubmissionAsync(string batchId, CancellationToken cancellationToken)
+    {
+        await _uploads.PatchItemAsync<UploadBatchRecord>(
+            batchId,
+            new PartitionKey(batchId),
+            [
+                PatchOperation.Set("/submissionCompleted", true),
+                PatchOperation.Set("/updatedUtc", DateTimeOffset.UtcNow)
+            ],
+            cancellationToken: cancellationToken);
+    }
+
+    public async Task CreateImportAsync(StorageImportRecord import, CancellationToken cancellationToken)
+    {
+        await _uploads.CreateItemAsync(import, new PartitionKey(import.Id), cancellationToken: cancellationToken);
     }
 
     public async Task SetUploadStatusAsync(string uploadId, string status, string? failureSummary, CancellationToken cancellationToken)
@@ -100,6 +198,31 @@ public sealed class CosmosFaceReviewRepository : IFaceReviewRepository
             new PartitionKey(uploadId),
             operations,
             cancellationToken: cancellationToken);
+    }
+
+    private async Task<T?> ReadAsync<T>(string id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _uploads.ReadItemAsync<T>(id, new PartitionKey(id), cancellationToken: cancellationToken);
+            return response.Resource;
+        }
+        catch (CosmosException exception) when (exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return default;
+        }
+    }
+
+    private async Task<IReadOnlyList<T>> QueryAsync<T>(QueryDefinition query, CancellationToken cancellationToken)
+    {
+        var results = new List<T>();
+        using var iterator = _uploads.GetItemQueryIterator<T>(query, requestOptions: new QueryRequestOptions { MaxItemCount = 100 });
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(cancellationToken);
+            results.AddRange(page);
+        }
+        return results;
     }
 
     public async Task<ReviewRecord?> GetReviewAsync(

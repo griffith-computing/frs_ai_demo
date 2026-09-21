@@ -24,5 +24,6 @@ public sealed class PhotoUploadedEvent
     public required string BlobUrl { get; init; }
     public required string ContainerName { get; init; }
     public required string BlobName { get; init; }
+    public string? StorageAccountName { get; init; }
     public DateTimeOffset TimestampUtc { get; init; } = DateTimeOffset.UtcNow;
 }

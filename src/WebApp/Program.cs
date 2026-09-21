@@ -23,6 +23,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using FrsAiDemo.WebApp.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,6 +49,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddRazorPages().AddMicrosoftIdentityUI();
 builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.Configure<BulkUploadOptions>(builder.Configuration.GetSection("BulkUploads"));
 
 var managedIdentityClientId = builder.Configuration["AZURE_CLIENT_ID"];
 TokenCredential credential = string.IsNullOrWhiteSpace(managedIdentityClientId)

@@ -193,6 +193,11 @@ secure value at deploy time (or via `entraClientSecret` in Key Vault reference).
 | `useExistingWebApp` | No | `false` | Set to `true` to reuse an existing Web App and its App Service plan. |
 | `existingWebAppName` | Only if `useExistingWebApp=true` | — | Name of the existing Web App. |
 | `existingWebAppPlanName` | Only if `useExistingWebApp=true` | — | Name of the existing Web App's App Service plan. |
+| `bulkUploadsEnabled` | No | `false` | Feature gate for browser batches and storage imports. Existing deployments remain single-file only. |
+| `bulkUploadsMaxFiles` | No | `100` | Maximum files in one browser-selected batch (1–100). |
+| `bulkUploadsMaxConcurrency` | No | `3` | Maximum concurrent browser upload requests (1–10). |
+| `bulkUploadSources` | No | `[]` | Administrator allowlist of storage account/container sources and permitted import modes. |
+| `bulkUploadsImportSchedule` | No | `0 */1 * * * *` | NCRONTAB schedule for processing queued storage imports (once per minute by default). |
 
 All reused resources must already exist in the deployment resource group. The
 deployment principal must be able to configure them and create their private
@@ -443,6 +448,72 @@ The web app supports:
   managed identity; and
 - durable upload states: `Queued`, `Processing`, `Completed`, `NoFaces`, or
   `Failed`, including the explicit `No face data observed` no-face result.
+
+### Bulk browser uploads and storage imports
+
+Bulk operations are **disabled by default**. Set `bulkUploadsEnabled=true` to
+show the browser batch controls and administrator-configured storage sources.
+When enabled, a reviewer can select up to `bulkUploadsMaxFiles` JPEG/PNG files
+(100 by default). The browser submits at most `bulkUploadsMaxConcurrency`
+requests concurrently (3 by default), then displays durable per-image batch
+status. The normal 6 MB per-image limit still applies.
+
+Storage sources are an explicit deployment-time allowlist. `bulkUploadSources`
+is a JSON array that is serialized to the `BulkUploads__SourcesJson` app setting
+on both the Web App and Function App. This string representation binds through
+.NET `IConfiguration` without relying on array-index environment variable
+expansion. For example, use the following value in a Bicep parameters file:
+
+```json
+[
+  {
+    "key": "controlled-test",
+    "displayName": "Controlled test images",
+    "accountName": "contosotestimages",
+    "containerName": "approved-images",
+    "allowCopy": true,
+    "allowInPlace": false,
+    "grantRbac": true
+  }
+]
+```
+
+`key` must be unique. `allowCopy` permits copying each source blob into this
+deployment's `photos` container before analysis. `allowInPlace` permits analysis
+and later review directly from the source container; source blobs must therefore
+remain available for the lifetime of their records. Set only the modes intended
+for that source. The Function revalidates the account, container, key, and mode
+against the same allowlist before processing. Imports enumerate supported
+images and automatically create chunks of at most **100 images**, independently
+of the browser batch limit, so large containers do not become one oversized
+batch.
+
+`grantRbac` is infrastructure-only metadata and is ignored by the application.
+When it is `true`, the source account/container must already exist in the same
+resource group as this deployment. Bicep grants **Storage Blob Data Reader** at
+that container to the Function identity; it also grants the Web App identity
+reader access only when `allowInPlace=true`, so authorized reviewers can load
+in-place images. The deployment principal must be allowed to create role
+assignments.
+
+For a source outside this resource group, set `grantRbac` to `false` and have an
+administrator grant Storage Blob Data Reader on the source container to both
+the Web App and Function App user-assigned managed identities. RBAC alone does
+not bypass storage networking. If the external account disables public access
+or restricts its firewall, provide a Blob private endpoint reachable from the
+apps' VNet integration subnets and link/configure the corresponding
+`privatelink.blob.core.windows.net` private DNS zone. Cross-subscription or
+cross-tenant sources may require the storage owner to create these assignments
+and network links; this template intentionally does not alter external
+resources.
+
+Treat this feature as a controlled-test capability until it has been validated
+with representative, non-sensitive data in the target network. It accepts only
+JPEG/PNG blobs up to 6 MB, imports the whole allowlisted container (there is no
+prefix picker), and does not manage source retention, legal consent, duplicate
+business semantics, downstream Face API quotas, or production-scale throughput
+and cost controls. Start with copy mode and a small dedicated container; enable
+in-place mode only with an established source retention policy.
 
 ### Microsoft Entra setup
 

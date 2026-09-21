@@ -12,6 +12,16 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 //----------------------------------------------------------------------------------
 
+type bulkUploadSource = {
+  key: string
+  displayName: string
+  accountName: string
+  containerName: string
+  allowCopy: bool
+  allowInPlace: bool
+  grantRbac: bool
+}
+
 @description('Short project prefix used to derive resource names (lowercase, alphanumeric).')
 @minLength(3)
 @maxLength(12)
@@ -77,6 +87,25 @@ param existingWebAppName string = ''
 
 @description('Name of the existing App Service plan used by the Web App. Required when useExistingWebApp is true; must be in this resource group and deployment region.')
 param existingWebAppPlanName string = ''
+
+@description('Enables browser batch upload and allowlisted storage import. Disabled by default.')
+param bulkUploadsEnabled bool = false
+
+@description('Maximum number of files accepted in one browser batch.')
+@minValue(1)
+@maxValue(100)
+param bulkUploadsMaxFiles int = 100
+
+@description('Maximum number of concurrent browser upload requests.')
+@minValue(1)
+@maxValue(10)
+param bulkUploadsMaxConcurrency int = 3
+
+@description('Allowlisted storage import sources. Each object must contain key, displayName, accountName, containerName, allowCopy, allowInPlace, and grantRbac. Set grantRbac=true only when the source account and container exist in this resource group.')
+param bulkUploadSources bulkUploadSource[] = []
+
+@description('Timer schedule used to process storage imports, in NCRONTAB format.')
+param bulkUploadsImportSchedule string = '0 */1 * * * *'
 
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}st${suffix}')
@@ -209,6 +238,11 @@ module functionApp 'modules/functionapp.bicep' = {
     integrationSubnetId: network.outputs.integrationSubnetId
     entraTenantId: entraTenantId
     uploadApiClientId: uploadApiClientId
+    bulkUploadsEnabled: bulkUploadsEnabled
+    bulkUploadsMaxFiles: bulkUploadsMaxFiles
+    bulkUploadsMaxConcurrency: bulkUploadsMaxConcurrency
+    bulkUploadSources: bulkUploadSources
+    bulkUploadsImportSchedule: bulkUploadsImportSchedule
   }
   dependsOn: [
     privateEndpoints
@@ -250,6 +284,10 @@ module webApp 'modules/webapp.bicep' = {
     storageAccountName: storage.outputs.storageAccountName
     eventHubFullyQualifiedNamespace: eventHub.outputs.fullyQualifiedNamespace
     eventHubName: eventHub.outputs.eventHubName
+    bulkUploadsEnabled: bulkUploadsEnabled
+    bulkUploadsMaxFiles: bulkUploadsMaxFiles
+    bulkUploadsMaxConcurrency: bulkUploadsMaxConcurrency
+    bulkUploadSources: bulkUploadSources
   }
   dependsOn: [
     privateEndpoints
@@ -270,6 +308,17 @@ module webRbac 'modules/webrbac.bicep' = {
     reviewsContainerName: cosmos.outputs.reviewsContainerName
   }
 }
+
+module bulkUploadSourceRbac 'modules/bulkuploadrbac.bicep' = [for source in bulkUploadSources: if (source.grantRbac) {
+  name: 'bulkUploadSourceRbac-${uniqueString(source.accountName, source.containerName)}'
+  params: {
+    storageAccountName: source.accountName
+    containerName: source.containerName
+    webPrincipalId: webIdentity.outputs.identityPrincipalId
+    functionPrincipalId: identity.outputs.identityPrincipalId
+    allowInPlace: source.allowInPlace
+  }
+}]
 
 output functionAppName string = functionApp.outputs.functionAppName
 output functionAppHostName string = functionApp.outputs.functionAppHostName

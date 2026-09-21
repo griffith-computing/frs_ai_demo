@@ -23,31 +23,147 @@
 <section class="page-heading compact">
     <div>
         <p class="eyebrow">New analysis</p>
-        <h1>Upload a photo</h1>
-        <p>JPEG or PNG, up to 6 MB.</p>
+        <h1>@(Model.BulkEnabled ? "Upload photos" : "Upload a photo")</h1>
+        <p>JPEG or PNG, up to 6 MB each.</p>
     </div>
 </section>
 
 <form method="post" enctype="multipart/form-data" class="upload-workspace">
     <div asp-validation-summary="ModelOnly" class="validation" role="alert"></div>
     <label class="drop-zone" for="photo">
-        <span class="drop-title">Choose a source photo</span>
+        <span class="drop-title">Choose @(Model.BulkEnabled ? $"up to {Model.MaxFiles} photos" : "a source photo")</span>
         <span>or drop it here</span>
-        <input asp-for="Photo" id="photo" type="file" accept="image/jpeg,image/png" />
+        <input asp-for="Photo" id="photo" type="file" accept="image/jpeg,image/png" multiple="@Model.BulkEnabled" />
     </label>
     <span asp-validation-for="Photo" class="validation"></span>
-    <img id="preview" class="upload-preview" alt="Selected photo preview" hidden />
-    <button type="submit">Queue analysis</button>
+    @if (!Model.BulkEnabled)
+    {
+        <img id="preview" class="upload-preview" alt="Selected photo preview" hidden />
+        <button type="submit">Queue analysis</button>
+    }
+    else
+    {
+        <div id="selection-summary" class="notice" hidden></div>
+        <div id="upload-progress" class="batch-client-progress" hidden>
+            <div class="progress-track"><span></span></div>
+            <p id="upload-progress-detail"></p>
+        </div>
+        <button id="queue-batch" type="button">Queue selected photos</button>
+    }
 </form>
+
+@if (Model.BulkEnabled && Model.Sources.Count > 0)
+{
+    <section class="storage-import-panel">
+        <p class="eyebrow">Existing dataset</p>
+        <h2>Import a storage container</h2>
+        <p>Eligible images are discovered in the background and split into batches of up to @Model.MaxFiles.</p>
+        <form method="post" asp-page-handler="StartImport" class="storage-import-form">
+            <div asp-validation-summary="ModelOnly" class="validation" role="alert"></div>
+            <label for="sourceKey">Allowlisted source</label>
+            <select id="sourceKey" name="sourceKey" required>
+                @foreach (var source in Model.Sources)
+                {
+                    <option value="@source.Key" data-copy="@source.AllowCopy.ToString().ToLowerInvariant()" data-inplace="@source.AllowInPlace.ToString().ToLowerInvariant()">@source.DisplayName</option>
+                }
+            </select>
+            <fieldset>
+                <legend>Import mode</legend>
+                <label class="choice"><input type="radio" name="mode" value="copy" checked /><span>Copy to ingestion storage</span></label>
+                <label class="choice"><input type="radio" name="mode" value="inplace" /><span>Process in place</span></label>
+            </fieldset>
+            <button type="submit">Start storage import</button>
+        </form>
+    </section>
+}
 
 @section Scripts {
 <script>
 const input = document.getElementById('photo');
-const preview = document.getElementById('preview');
-input.addEventListener('change', () => {
-    if (!input.files.length) { preview.hidden = true; return; }
-    preview.src = URL.createObjectURL(input.files[0]);
-    preview.hidden = false;
-});
+const bulkEnabled = @Model.BulkEnabled.ToString().ToLowerInvariant();
+if (!bulkEnabled) {
+    const preview = document.getElementById('preview');
+    input.addEventListener('change', () => {
+        if (!input.files.length) { preview.hidden = true; return; }
+        preview.src = URL.createObjectURL(input.files[0]);
+        preview.hidden = false;
+    });
+} else {
+    document.querySelector('.upload-workspace').addEventListener('submit', event => event.preventDefault());
+    const maxFiles = @Model.MaxFiles;
+    const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+    const summary = document.getElementById('selection-summary');
+    const progress = document.getElementById('upload-progress');
+    const progressBar = progress.querySelector('.progress-track span');
+    const detail = document.getElementById('upload-progress-detail');
+    const button = document.getElementById('queue-batch');
+
+    input.addEventListener('change', () => {
+        summary.hidden = !input.files.length;
+        summary.textContent = input.files.length > maxFiles
+            ? `Choose no more than ${maxFiles} files.`
+            : `${input.files.length} file(s) selected.`;
+    });
+
+    button.addEventListener('click', async () => {
+        const files = Array.from(input.files);
+        if (!files.length || files.length > maxFiles) {
+            summary.hidden = false;
+            summary.textContent = `Choose between 1 and ${maxFiles} files.`;
+            return;
+        }
+        button.disabled = true;
+        progress.hidden = false;
+        const start = new FormData();
+        start.append('__RequestVerificationToken', token);
+        start.append('fileCount', files.length);
+        const startResponse = await fetch('?handler=StartBatch', { method: 'POST', body: start });
+        if (!startResponse.ok) {
+            detail.textContent = 'The batch could not be started.';
+            button.disabled = false;
+            return;
+        }
+        const batch = await startResponse.json();
+        let next = 0;
+        let finished = 0;
+        const worker = async () => {
+            while (next < files.length) {
+                const file = files[next++];
+                const body = new FormData();
+                body.append('__RequestVerificationToken', token);
+                body.append('batchId', batch.batchId);
+                body.append('photo', file);
+                await fetch('?handler=BatchFile', { method: 'POST', body });
+                finished++;
+                progressBar.style.width = `${Math.round(finished * 100 / files.length)}%`;
+                detail.textContent = `${finished} of ${files.length} submitted`;
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(batch.maxConcurrency, files.length) }, worker));
+        const finish = new FormData();
+        finish.append('__RequestVerificationToken', token);
+        finish.append('batchId', batch.batchId);
+        const finishResponse = await fetch('?handler=FinishBatch', { method: 'POST', body: finish });
+        const result = await finishResponse.json();
+        window.location.assign(result.statusUrl);
+    });
+}
+
+const sourceSelect = document.getElementById('sourceKey');
+if (sourceSelect) {
+    const modes = Array.from(document.querySelectorAll('input[name="mode"]'));
+    const updateModes = () => {
+        const selected = sourceSelect.selectedOptions[0];
+        for (const mode of modes) {
+            mode.disabled = selected.dataset[mode.value] !== 'true';
+        }
+        if (!modes.some(mode => mode.checked && !mode.disabled)) {
+            const firstAllowed = modes.find(mode => !mode.disabled);
+            if (firstAllowed) firstAllowed.checked = true;
+        }
+    };
+    sourceSelect.addEventListener('change', updateModes);
+    updateModes();
+}
 </script>
 }
