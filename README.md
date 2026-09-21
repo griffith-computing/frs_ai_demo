@@ -141,20 +141,28 @@ to it.
   Program.cs                  # DI setup (DefaultAzureCredential, clients)
   UploadPhotoFunction.cs       # HTTP trigger: upload photo -> blob + event
   ProcessPhotoFunction.cs      # Event Hub trigger: detect/identify/log
+  ImportStorageFunction.cs     # timer-based import of allowlisted storage blobs
   Services/
-    BlobStorageService.cs
+    BlobStorageService.cs      # blob upload/download, import validation, poison handling
     FaceApiService.cs          # Face API REST wrapper (Detect/Person Directory/Identify)
     CosmosFaceRepository.cs
+    CosmosUploadRepository.cs  # upload-state tracking for queued/processing/completed jobs
   Models/
     PhotoUploadedEvent.cs
     FaceRecord.cs               # Cosmos document + RecognitionEvent
+    UploadRecord.cs             # durable upload/job state for review and processing
     FaceApiModels.cs            # Face API REST request/response DTOs
   host.json
   local.settings.json.example   # copy to local.settings.json for local dev
 /src/WebApp/
   Program.cs                    # Entra auth, Reviewer policy, Azure clients
+  Models/
+    BulkUploadOptions.cs        # browser upload defaults and storage-source config
+    ReviewModels.cs             # review, person, and paging DTOs
   Pages/                        # people, sighting review, upload/status, photo proxy
-  Services/                     # Cosmos repositories and upload orchestration
+  Services/
+    CosmosFaceReviewRepository.cs
+    UploadService.cs            # browser upload orchestration + Event Hub enqueue
 ```
 
 ## Deploying the infrastructure
