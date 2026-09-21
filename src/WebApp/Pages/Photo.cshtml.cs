@@ -13,17 +13,21 @@
 //----------------------------------------------------------------------------------
 
 using Azure.Storage.Blobs;
+using Azure.Core;
 using FrsAiDemo.WebApp.Models;
 using FrsAiDemo.WebApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 
 namespace FrsAiDemo.WebApp.Pages;
 
 public sealed class PhotoModel(
     IFaceReviewRepository repository,
     BlobServiceClient blobServiceClient,
-    IConfiguration configuration) : PageModel
+    TokenCredential credential,
+    IConfiguration configuration,
+    IOptions<BulkUploadOptions> bulkOptions) : PageModel
 {
     public async Task<IActionResult> OnGetAsync(string personId, string sightingKey, CancellationToken cancellationToken)
     {
@@ -34,14 +38,40 @@ public sealed class PhotoModel(
             return NotFound();
         }
 
-        var segments = blobUri.AbsolutePath.Split('/', 3, StringSplitOptions.RemoveEmptyEntries);
+        var segments = blobUri.AbsolutePath.Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
         var configuredContainer = configuration["PhotosContainerName"] ?? "photos";
-        if (segments.Length != 2 || !string.Equals(segments[0], configuredContainer, StringComparison.Ordinal))
+        if (segments.Length != 2)
         {
             return NotFound();
         }
 
-        var blobClient = blobServiceClient.GetBlobContainerClient(configuredContainer).GetBlobClient(Uri.UnescapeDataString(segments[1]));
+        BlobServiceClient selectedClient;
+        if (string.Equals(segments[0], configuredContainer, StringComparison.Ordinal)
+            && string.Equals(blobUri.Host, blobServiceClient.Uri.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            selectedClient = blobServiceClient;
+        }
+        else
+        {
+            var source = bulkOptions.Value.GetSources().SingleOrDefault(x =>
+                x.AllowInPlace
+                && string.Equals(x.ContainerName, segments[0], StringComparison.Ordinal)
+                && string.Equals(
+                    blobUri.Host,
+                    $"{x.AccountName}.blob.core.windows.net",
+                    StringComparison.OrdinalIgnoreCase));
+            if (!bulkOptions.Value.Enabled || source is null)
+            {
+                return NotFound();
+            }
+            selectedClient = new BlobServiceClient(
+                new Uri($"https://{source.AccountName}.blob.core.windows.net"),
+                credential);
+        }
+
+        var blobClient = selectedClient
+            .GetBlobContainerClient(segments[0])
+            .GetBlobClient(Uri.UnescapeDataString(segments[1]));
         var download = await blobClient.DownloadStreamingAsync(cancellationToken: cancellationToken);
         Response.Headers.CacheControl = "private, max-age=300";
         Response.Headers.XContentTypeOptions = "nosniff";

@@ -1,0 +1,63 @@
+@*
+----------------------------------------------------------------------------------
+ THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
+ EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES
+ OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
+
+ Copyright (c) Microsoft Corporation. All rights reserved.
+----------------------------------------------------------------------------------
+*@
+
+@page "{id}"
+@model ImportStatusModel
+@{
+    ViewData["Title"] = "Storage import";
+}
+
+<section class="page-heading compact">
+    <div>
+        <p class="eyebrow">Storage import</p>
+        <h1 id="import-status">@Model.Import.Status</h1>
+        <p class="mono">@Model.Import.Id</p>
+        <p>@Model.Import.SourceAccountName / @Model.Import.SourceContainerName · @Model.Import.Mode</p>
+    </div>
+</section>
+<section class="batch-status">
+    <div class="progress-track determinate"><span></span></div>
+    <p id="discovered">Waiting for the importer to discover images.</p>
+    <div class="status-counts">
+        <div><strong id="queued">0</strong><span>Queued</span></div>
+        <div><strong id="processing">0</strong><span>Processing</span></div>
+        <div><strong id="completed">0</strong><span>Completed</span></div>
+        <div><strong id="failed">0</strong><span>Failed</span></div>
+        <div><strong id="noFaces">0</strong><span>No face</span></div>
+    </div>
+    <div id="batches" class="batch-links"></div>
+</section>
+
+@section Scripts {
+<script>
+async function refresh() {
+    const response = await fetch('?handler=State', { headers: { Accept: 'application/json' } });
+    if (!response.ok) return;
+    const state = await response.json();
+    document.getElementById('import-status').textContent = state.status;
+    document.getElementById('discovered').textContent = `${state.discoveredFileCount} eligible image(s) discovered.`;
+    for (const key of ['queued', 'processing', 'completed', 'failed', 'noFaces']) {
+        document.getElementById(key).textContent = state.counts[key];
+    }
+    document.querySelector('.progress-track span').style.width = `${state.counts.progressPercent}%`;
+    const links = document.getElementById('batches');
+    links.replaceChildren();
+    for (const batch of state.batches) {
+        const link = document.createElement('a');
+        link.className = 'button secondary';
+        link.href = `/BatchStatus/${encodeURIComponent(batch.id)}`;
+        link.textContent = `${batch.id} (${batch.expectedFileCount})`;
+        links.appendChild(link);
+    }
+    if (!state.complete) window.setTimeout(refresh, 2500);
+}
+refresh();
+</script>
+}

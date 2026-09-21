@@ -13,6 +13,9 @@
     "EventHub__fullyQualifiedNamespace": "<namespace>.servicebus.windows.net",
     "EventHubName": "photo-events",
     "EventHubConsumerGroup": "process-photo-function",
+    "BulkUploads__Enabled": "false",
+    "BulkUploads__SourcesJson": "[]",
+    "BulkUploadsImportSchedule": "0 */1 * * * *",
 
     "CosmosDb__Endpoint": "https://<cosmos-account>.documents.azure.com:443/",
     "CosmosDb__DatabaseName": "FacialRecognitionDb",
