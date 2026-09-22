@@ -1,0 +1,126 @@
+@page "/configure"
+@inject IFaceLabWorkbench Workbench
+
+<PageTitle>FaceLab configuration</PageTitle>
+
+<h1>Configuration</h1>
+<p class="lede">These settings are applied to new runs in the current FaceLab session.</p>
+
+<EditForm Model="Workbench.Options">
+    <div class="form-grid">
+        <label>
+            <span>Face API endpoint</span>
+            <InputText @bind-Value="Workbench.Options.Endpoint" />
+        </label>
+        <label>
+            <span>Auth mode</span>
+            <InputSelect @bind-Value="Workbench.Options.AuthMode">
+                @foreach (var mode in Enum.GetValues<FaceAuthMode>())
+                {
+                    <option value="@mode">@mode</option>
+                }
+            </InputSelect>
+        </label>
+        <label>
+            <span>Subscription key</span>
+            <InputText type="password" @bind-Value="Workbench.Options.SubscriptionKey" />
+        </label>
+        <label>
+            <span>API version segment</span>
+            <InputText @bind-Value="Workbench.Options.ApiVersionSegment" />
+        </label>
+        <label>
+            <span>Detection model</span>
+            <InputText @bind-Value="Workbench.Options.DetectionModel" />
+        </label>
+        <label>
+            <span>Recognition model</span>
+            <InputText @bind-Value="Workbench.Options.RecognitionModel" />
+        </label>
+        <label>
+            <span>Dynamic person group ID</span>
+            <InputText @bind-Value="Workbench.Options.DynamicPersonGroupId" />
+        </label>
+        <label>
+            <span>Confidence threshold</span>
+            <InputNumber @bind-Value="Workbench.Options.ConfidenceThreshold" />
+        </label>
+        <label>
+            <span>Max image bytes</span>
+            <InputNumber @bind-Value="Workbench.Options.MaxImageSizeBytes" />
+        </label>
+        <label>
+            <span>Identify batch size</span>
+            <InputNumber @bind-Value="Workbench.Options.IdentifyBatchSize" />
+        </label>
+    </div>
+
+    <div class="checkboxes">
+        <label><InputCheckbox @bind-Value="Workbench.Options.AutoEnrollUnmatchedFaces" /> Auto-enroll unmatched faces</label>
+        <label><InputCheckbox @bind-Value="Workbench.Options.EnsureDynamicPersonGroupExists" /> Ensure dynamic person group exists</label>
+    </div>
+
+    <div class="actions">
+        <button type="button" class="button primary" @onclick="TestAsync" disabled="@isTesting">Test connection</button>
+    </div>
+</EditForm>
+
+@if (validationErrors.Count > 0)
+{
+    <div class="alert warning">
+        <strong>Fix configuration</strong>
+        <ul>
+            @foreach (var error in validationErrors)
+            {
+                <li>@error</li>
+            }
+        </ul>
+    </div>
+}
+
+@if (testTrace is not null)
+{
+    <div class="card">
+        <h2>Latest test call</h2>
+        <dl class="details">
+            <dt>Operation</dt><dd>@testTrace.Operation</dd>
+            <dt>Status</dt><dd>@(testTrace.StatusCode?.ToString() ?? "n/a")</dd>
+            <dt>Elapsed</dt><dd>@testTrace.ElapsedMilliseconds ms</dd>
+            <dt>URL</dt><dd>@testTrace.Url</dd>
+        </dl>
+        @if (!string.IsNullOrWhiteSpace(testTrace.ResponseBody))
+        {
+            <pre>@testTrace.ResponseBody</pre>
+        }
+        @if (!string.IsNullOrWhiteSpace(testTrace.Error))
+        {
+            <pre>@testTrace.Error</pre>
+        }
+    </div>
+}
+
+@code {
+    private bool isTesting;
+    private IReadOnlyList<string> validationErrors = [];
+    private CallTrace? testTrace;
+
+    private async Task TestAsync()
+    {
+        testTrace = null;
+        validationErrors = Workbench.Options.Validate();
+        if (validationErrors.Count > 0)
+        {
+            return;
+        }
+
+        isTesting = true;
+        try
+        {
+            testTrace = await Workbench.TestConnectionAsync(CancellationToken.None);
+        }
+        finally
+        {
+            isTesting = false;
+        }
+    }
+}

@@ -1,0 +1,42 @@
+@page "/history"
+@inject IFaceLabWorkbench Workbench
+
+<PageTitle>FaceLab history</PageTitle>
+
+<h1>History</h1>
+
+<div class="table-card">
+    <table>
+        <thead>
+            <tr>
+                <th>Run</th>
+                <th>Started</th>
+                <th>Status</th>
+                <th>Faces</th>
+                <th>Duration</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var run in runs)
+            {
+                <tr>
+                    <td><a href="history/@run.Id">#@run.Id</a></td>
+                    <td>@run.StartedUtc.LocalDateTime</td>
+                    <td>@run.Status</td>
+                    <td>@run.DetectedFaceCount</td>
+                    <td>@run.DurationMs ms</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IReadOnlyList<RunRecord> runs = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Workbench.InitializeAsync(CancellationToken.None);
+        runs = await Workbench.GetRunsAsync(100, CancellationToken.None);
+    }
+}

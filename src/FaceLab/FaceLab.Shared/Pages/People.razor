@@ -1,0 +1,42 @@
+@page "/people"
+@inject IFaceLabWorkbench Workbench
+
+<PageTitle>FaceLab people</PageTitle>
+
+<h1>People</h1>
+
+<div class="table-card">
+    <table>
+        <thead>
+            <tr>
+                <th>Person ID</th>
+                <th>Group</th>
+                <th>Sightings</th>
+                <th>Last confidence</th>
+                <th>Last seen</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var person in people)
+            {
+                <tr>
+                    <td>@person.PersonId</td>
+                    <td>@person.DynamicPersonGroupId</td>
+                    <td>@person.SightingCount</td>
+                    <td>@person.LastConfidence.ToString("F3")</td>
+                    <td>@person.LastSeenUtc.LocalDateTime</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IReadOnlyList<PersonRecord> people = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Workbench.InitializeAsync(CancellationToken.None);
+        people = await Workbench.GetPeopleAsync(CancellationToken.None);
+    }
+}

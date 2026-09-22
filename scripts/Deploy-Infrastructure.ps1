@@ -51,6 +51,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$BulkUploadsImportSchedule = '0 */1 * * * *',
 
+    [ValidateNotNullOrEmpty()]
+    [string]$FaceLabImagesContainerName = 'facelab-images',
+
     [ValidateScript({ Test-Path $_ -PathType Leaf })]
     [string]$BulkUploadSourcesFile
 )
@@ -145,7 +148,8 @@ try {
         "bulkUploadsMaxFiles=$BulkUploadsMaxFiles",
         "bulkUploadsMaxConcurrency=$BulkUploadsMaxConcurrency",
         "bulkUploadSources=$bulkUploadSources",
-        "bulkUploadsImportSchedule=$BulkUploadsImportSchedule"
+        "bulkUploadsImportSchedule=$BulkUploadsImportSchedule",
+        "faceLabImagesContainerName=$FaceLabImagesContainerName"
     )
 
     if ($EntraTenantId) {

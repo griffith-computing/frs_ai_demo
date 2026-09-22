@@ -6,6 +6,12 @@
     <Project Path="src/Tools/PhotoUploadHarness/PhotoUploadHarness.csproj" />
     <Project Path="src/WebApp/FrsAiDemo.WebApp.csproj" />
   </Folder>
+  <Folder Name="/src/Desktop/" />
+  <Folder Name="/src/FaceLab/">
+    <Project Path="src/FaceLab/FaceLab.Shared/FaceLab.Shared.csproj" />
+    <Project Path="src/FaceLab/FaceLab.Web/FaceLab.Web.csproj" />
+    <Project Path="src/FaceLab/FaceLab/FaceLab.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FaceLab.Core.Tests/FaceLab.Core.Tests.csproj" />
     <Project Path="tests/FunctionApp.Tests/FrsAiDemo.FunctionApp.Tests.csproj" />

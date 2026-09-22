@@ -1,0 +1,91 @@
+@page "/history/{RunId:int}"
+@inject IFaceLabWorkbench Workbench
+
+<PageTitle>Run @RunId</PageTitle>
+
+@if (run is null)
+{
+    <h1>Run not found</h1>
+}
+else
+{
+    <h1>Run #@run.Id</h1>
+    <section class="card">
+        <dl class="details">
+            <dt>Status</dt><dd>@run.Status</dd>
+            <dt>Image</dt><dd>@run.Image?.FileName</dd>
+            <dt>Detected faces</dt><dd>@run.DetectedFaceCount</dd>
+            <dt>Duration</dt><dd>@run.DurationMs ms</dd>
+        </dl>
+        @if (!string.IsNullOrWhiteSpace(run.ErrorMessage))
+        {
+            <pre>@run.ErrorMessage</pre>
+        }
+    </section>
+
+    <h2>Faces</h2>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Outcome</th>
+                    <th>Matched person</th>
+                    <th>Enrolled person</th>
+                    <th>Confidence</th>
+                    <th>Rectangle</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var face in run.Faces)
+                {
+                    <tr>
+                        <td>@face.Outcome</td>
+                        <td>@face.MatchedPersonId</td>
+                        <td>@face.EnrolledPersonId</td>
+                        <td>@face.Confidence.ToString("F3")</td>
+                        <td>@face.Left,@face.Top @face.Width x @face.Height</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Raw Face API calls</h2>
+    <div class="trace-list">
+        @foreach (var trace in run.Traces.OrderBy(t => t.TimestampUtc))
+        {
+            <article class="card trace">
+                <header>
+                    <strong>@trace.Operation</strong>
+                    <span>@trace.Method @trace.StatusCode in @trace.ElapsedMs ms</span>
+                </header>
+                <code>@trace.Url</code>
+                @if (!string.IsNullOrWhiteSpace(trace.RequestSummary))
+                {
+                    <pre>@trace.RequestSummary</pre>
+                }
+                @if (!string.IsNullOrWhiteSpace(trace.ResponseBody))
+                {
+                    <pre>@trace.ResponseBody</pre>
+                }
+                @if (!string.IsNullOrWhiteSpace(trace.Error))
+                {
+                    <pre>@trace.Error</pre>
+                }
+            </article>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int RunId { get; set; }
+
+    private RunRecord? run;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Workbench.InitializeAsync(CancellationToken.None);
+        run = await Workbench.GetRunAsync(RunId, CancellationToken.None);
+    }
+}

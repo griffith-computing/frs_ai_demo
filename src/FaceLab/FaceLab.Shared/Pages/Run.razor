@@ -1,0 +1,104 @@
+@page "/run"
+@inject IFaceLabWorkbench Workbench
+
+<PageTitle>Upload and run</PageTitle>
+
+<h1>Upload and run</h1>
+<p class="lede">Images are uploaded through the web app, stored by the configured server-side repository, and processed with FaceLab.Core.</p>
+
+<InputFile OnChange="UploadAsync" multiple accept="image/*" />
+
+@if (!string.IsNullOrWhiteSpace(status))
+{
+    <p class="status">@status</p>
+}
+
+<div class="table-card">
+    <table>
+        <thead>
+            <tr>
+                <th>File</th>
+                <th>Size</th>
+                <th>Imported</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var image in images)
+            {
+                <tr>
+                    <td>@image.FileName</td>
+                    <td>@FormatBytes(image.ByteCount)</td>
+                    <td>@image.ImportedUtc.LocalDateTime</td>
+                    <td><button class="button" @onclick="() => RunAsync(image.Id)" disabled="@isBusy">Run pipeline</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (latestRun is not null)
+{
+    <div class="card">
+        <h2>Latest run</h2>
+        <p><strong>@latestRun.Status</strong> with @latestRun.DetectedFaceCount detected face(s) in @latestRun.DurationMs ms.</p>
+        @if (!string.IsNullOrWhiteSpace(latestRun.ErrorMessage))
+        {
+            <pre>@latestRun.ErrorMessage</pre>
+        }
+        <a href="history/@latestRun.Id">Open raw call trace</a>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ImageRecord> images = [];
+    private RunRecord? latestRun;
+    private bool isBusy;
+    private string? status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Workbench.InitializeAsync(CancellationToken.None);
+        images = await Workbench.GetImagesAsync(50, CancellationToken.None);
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        isBusy = true;
+        var added = 0;
+        try
+        {
+            foreach (var file in args.GetMultipleFiles())
+            {
+                await using var stream = file.OpenReadStream(Workbench.Options.MaxImageSizeBytes);
+                await Workbench.SaveImageAsync(file.Name, file.ContentType, stream, CancellationToken.None);
+                added++;
+            }
+
+            images = await Workbench.GetImagesAsync(50, CancellationToken.None);
+            status = $"Uploaded {added} image(s).";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task RunAsync(int imageId)
+    {
+        isBusy = true;
+        latestRun = null;
+        try
+        {
+            latestRun = await Workbench.RunAsync(imageId, CancellationToken.None);
+            status = $"Completed run {latestRun.Id}.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private static string FormatBytes(int bytes) =>
+        bytes >= 1024 * 1024 ? $"{bytes / 1024.0 / 1024.0:F1} MB" : $"{bytes / 1024.0:F1} KB";
+}

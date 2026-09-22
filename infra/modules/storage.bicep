@@ -27,6 +27,9 @@ param existingStorageAccountName string = ''
 @description('Name of the blob container used to store uploaded photos.')
 param photosContainerName string = 'photos'
 
+@description('Name of the blob container used by the FaceLab web app to store staged images.')
+param faceLabImagesContainerName string = 'facelab-images'
+
 var effectiveStorageAccountName = useExistingStorageAccount ? existingStorageAccountName : storageAccountName
 
 resource existingStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = if (useExistingStorageAccount) {
@@ -69,6 +72,15 @@ resource photosContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
+resource faceLabImagesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: faceLabImagesContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 output storageAccountId string = useExistingStorageAccount ? existingStorageAccount.id : storageAccount.id
 output storageAccountName string = effectiveStorageAccountName
 output blobEndpoint string = useExistingStorageAccount ? existingStorageAccount!.properties.primaryEndpoints.blob : storageAccount!.properties.primaryEndpoints.blob
+output faceLabImagesContainerName string = faceLabImagesContainer.name

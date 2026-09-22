@@ -107,6 +107,9 @@ param bulkUploadSources bulkUploadSource[] = []
 @description('Timer schedule used to process storage imports, in NCRONTAB format.')
 param bulkUploadsImportSchedule string = '0 */1 * * * *'
 
+@description('Blob container used by the FaceLab web app for staged images.')
+param faceLabImagesContainerName string = 'facelab-images'
+
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}st${suffix}')
 var eventHubNamespaceName = '${namePrefix}-ehns-${suffix}'
@@ -114,9 +117,11 @@ var cosmosAccountName = toLower('${namePrefix}-cosmos-${suffix}')
 var faceAccountName = '${namePrefix}-face-${suffix}'
 var functionAppName = '${namePrefix}-func-${suffix}'
 var webAppName = '${namePrefix}-web-${suffix}'
+var faceLabWebAppName = '${namePrefix}-facelab-${suffix}'
 var appInsightsName = '${namePrefix}-appi-${suffix}'
 var identityName = '${namePrefix}-id-${suffix}'
 var webIdentityName = '${namePrefix}-web-id-${suffix}'
+var faceLabWebIdentityName = '${namePrefix}-facelab-id-${suffix}'
 var vnetName = '${namePrefix}-vnet-${suffix}'
 
 module network 'modules/network.bicep' = {
@@ -143,6 +148,14 @@ module webIdentity 'modules/identity.bicep' = {
   }
 }
 
+module faceLabWebIdentity 'modules/identity.bicep' = {
+  name: 'faceLabWebIdentityDeploy'
+  params: {
+    identityName: faceLabWebIdentityName
+    location: location
+  }
+}
+
 module storage 'modules/storage.bicep' = {
   name: 'storageDeploy'
   params: {
@@ -150,6 +163,7 @@ module storage 'modules/storage.bicep' = {
     location: location
     useExistingStorageAccount: useExistingStorageAccount
     existingStorageAccountName: existingStorageAccountName
+    faceLabImagesContainerName: faceLabImagesContainerName
   }
 }
 
@@ -309,6 +323,37 @@ module webRbac 'modules/webrbac.bicep' = {
   }
 }
 
+module faceLabWebApp 'modules/facelabwebapp.bicep' = {
+  name: 'faceLabWebAppDeploy'
+  params: {
+    webAppName: faceLabWebAppName
+    location: location
+    userAssignedIdentityId: faceLabWebIdentity.outputs.identityId
+    userAssignedIdentityClientId: faceLabWebIdentity.outputs.identityClientId
+    integrationSubnetId: network.outputs.webIntegrationSubnetId
+    appInsightsConnectionString: appInsights.outputs.appInsightsConnectionString
+    logAnalyticsWorkspaceId: appInsights.outputs.logAnalyticsWorkspaceId
+    storageAccountName: storage.outputs.storageAccountName
+    faceLabImagesContainerName: storage.outputs.faceLabImagesContainerName
+    faceApiEndpoint: face.outputs.faceEndpoint
+    dynamicPersonGroupId: dynamicPersonGroupId
+  }
+  dependsOn: [
+    privateEndpoints
+  ]
+}
+
+module faceLabRbac 'modules/rbac.bicep' = {
+  name: 'faceLabRbacDeploy'
+  params: {
+    principalId: faceLabWebIdentity.outputs.identityPrincipalId
+    storageAccountName: storage.outputs.storageAccountName
+    eventHubNamespaceName: eventHub.outputs.namespaceName
+    faceAccountName: face.outputs.faceAccountName
+    cosmosAccountName: cosmos.outputs.cosmosAccountName
+  }
+}
+
 module bulkUploadSourceRbac 'modules/bulkuploadrbac.bicep' = [for source in bulkUploadSources: if (source.grantRbac) {
   name: 'bulkUploadSourceRbac-${uniqueString(source.accountName, source.containerName)}'
   params: {
@@ -331,3 +376,6 @@ output cosmosReviewsContainerName string = cosmos.outputs.reviewsContainerName
 output faceAccountName string = face.outputs.faceAccountName
 output webAppName string = webApp.outputs.webAppName
 output webAppHostName string = webApp.outputs.webAppHostName
+output faceLabWebAppName string = faceLabWebApp.outputs.webAppName
+output faceLabWebAppHostName string = faceLabWebApp.outputs.webAppHostName
+output faceLabImagesContainerName string = storage.outputs.faceLabImagesContainerName
