@@ -180,6 +180,10 @@ to it.
   Views/                        # config, upload, history, people, run detail pages
   ViewModels/                   # MVVM view models for each page
   Services/                     # config persistence (SecureStorage + preferences)
+/scripts/
+  Deploy-Infrastructure.ps1     # resource group and Bicep deployment
+  Deploy-FunctionApp.ps1        # Function App publish and zip deployment
+  Deploy-WebApp.ps1             # web app publish and Linux-safe zip deployment
 ```
 
 ## Deploying the infrastructure
@@ -188,12 +192,33 @@ Prerequisites: [Azure CLI](https://learn.microsoft.com/cli/azure/) with the
 Bicep extension (`az bicep install`), and an Azure subscription with access
 to create Cognitive Services (Face) resources (this may require approval —
 see [Face API limited access](https://learn.microsoft.com/legal/cognitive-services/computer-vision/limited-access-identity)).
+Sign in to the target subscription with `az login` before running a deployment
+script.
 
 The deployment now provisions the reviewer web app alongside the ingestion
 pipeline, so it requires the Microsoft Entra app-registration values from
 [Microsoft Entra setup](#microsoft-entra-setup). Provide `entraClientId` and
 `entraClientSecret`; do not put the secret in a parameters file — pass it as a
 secure value at deploy time (or via `entraClientSecret` in Key Vault reference).
+
+Use `scripts/Deploy-Infrastructure.ps1` to create the resource group and
+deploy the Bicep template. It prompts for the web app client secret without
+writing it to disk:
+
+```powershell
+.\scripts\Deploy-Infrastructure.ps1 `
+  -ResourceGroupName rg-frs-ai-demo `
+  -Location eastus `
+  -EntraClientId <application-client-id> `
+  -UploadApiClientId <upload-api-client-id>
+```
+
+Pass `-WhatIf` to compile the template and run the Azure Resource Manager
+preview without changing resources. The script exposes the create-or-reuse and
+bulk upload Bicep settings as matching PowerShell parameters. For example,
+provide `-UseExistingStorageAccount -ExistingStorageAccountName <storage-account>`
+to reuse storage, or `-BulkUploadSourcesFile .\sources.json` to load the
+allowlist JSON.
 
 | Parameter | Required | Default | Purpose |
 | --- | --- | --- | --- |
@@ -264,55 +289,6 @@ the function when the bearer token is absent or invalid. The function's HTTP
 trigger is therefore anonymous at the Functions-host layer; do not disable Easy
 Auth on the deployed app.
 
-```powershell
-az login
-az group create --name rg-frs-ai-demo --location eastus
-
-$entraSecret = Read-Host "Entra web app client secret" -AsSecureString
-$entraSecretPlain = [System.Net.NetworkCredential]::new('', $entraSecret).Password
-
-az deployment group create `
-  --resource-group rg-frs-ai-demo `
-  --template-file infra/main.bicep `
-  --parameters namePrefix=frsaidemo location=eastus `
-               entraClientId=<application-client-id> `
-               entraClientSecret=$entraSecretPlain `
-               uploadApiClientId=<upload-api-client-id>
-
-Remove-Variable entraSecretPlain
-```
-
-To reuse all supported resources, add the corresponding switches and names.
-The switches are independent, so the same parameters also support mixed
-create/reuse deployments:
-
-```powershell
-az deployment group create `
-  --resource-group rg-frs-ai-demo `
-  --template-file infra/main.bicep `
-  --parameters entraClientId=<application-client-id> `
-               entraClientSecret=$entraSecretPlain `
-               uploadApiClientId=<upload-api-client-id> `
-               useExistingStorageAccount=true existingStorageAccountName=<storage-account> `
-               useExistingEventHubNamespace=true existingEventHubNamespaceName=<event-hubs-namespace> `
-               useExistingCosmosAccount=true existingCosmosAccountName=<cosmos-account> `
-               useExistingFaceAccount=true existingFaceAccountName=<face-account> `
-               useExistingFunctionApp=true existingFunctionAppName=<function-app> existingFunctionAppPlanName=<function-plan> `
-               useExistingWebApp=true existingWebAppName=<web-app> existingWebAppPlanName=<web-plan>
-```
-
-Validate templates without deploying (still requires the Entra parameters):
-
-```powershell
-az bicep build --file infra/main.bicep --stdout
-az deployment group what-if `
-  --resource-group rg-frs-ai-demo `
-  --template-file infra/main.bicep `
-  --parameters entraClientId=<application-client-id> `
-               entraClientSecret=<client-secret> `
-               uploadApiClientId=<upload-api-client-id>
-```
-
 > Deployment takes noticeably longer than a plain PaaS-only setup — Private
 > Endpoints, Private DNS zone links, and the Elastic Premium plan warm-up
 > each add a few minutes. See [Networking](#networking) above for what's
@@ -330,11 +306,9 @@ production subscription.
 ## Deploying the Function App code
 
 ```powershell
-cd src/FunctionApp
-dotnet publish -c Release -o publish
-# then zip-deploy, e.g.:
-Compress-Archive -Path publish\* -DestinationPath publish.zip -Force
-az functionapp deployment source config-zip --resource-group rg-frs-ai-demo --name <functionAppName> --src publish.zip
+.\scripts\Deploy-FunctionApp.ps1 `
+  -ResourceGroupName rg-frs-ai-demo `
+  -FunctionAppName <functionAppName>
 ```
 
 ## Local development
@@ -625,42 +599,15 @@ time; the secret is a secure Bicep parameter and must not be committed to a
 parameters file.
 
 ```powershell
-$entraSecret = Read-Host "Entra web app client secret" -AsSecureString
-$entraSecretPlain = [System.Net.NetworkCredential]::new('', $entraSecret).Password
-
-az deployment group create `
-  --resource-group rg-frs-ai-demo `
-  --template-file infra/main.bicep `
-  --parameters namePrefix=frsaidemo location=eastus `
-               entraClientId=<application-client-id> `
-               entraClientSecret=$entraSecretPlain `
-               uploadApiClientId=<upload-api-client-id>
-
-Remove-Variable entraSecretPlain
-
-dotnet publish src/WebApp/FrsAiDemo.WebApp.csproj -c Release -o src/WebApp/publish
-
-# Pack with forward-slash entry names. PowerShell's Compress-Archive can emit backslash
-# separators (e.g. runtimes\win\...) that Kudu's Linux zip extractor rejects, so the
-# deployment fails at "Extract zip". Build the package with System.IO.Compression instead.
-$src = (Resolve-Path src/WebApp/publish).Path
-$zip = Join-Path (Resolve-Path src/WebApp).Path 'publish.zip'
-if (Test-Path $zip) { Remove-Item $zip -Force }
-Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-$fs = [System.IO.File]::Open($zip, [System.IO.FileMode]::CreateNew)
-$archive = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
-foreach ($f in Get-ChildItem $src -Recurse -File) {
-  $name = $f.FullName.Substring($src.Length + 1) -replace '\\','/'
-  $entry = $archive.CreateEntry($name, [System.IO.Compression.CompressionLevel]::Optimal)
-  $out = $entry.Open()
-  $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
-  $out.Write($bytes, 0, $bytes.Length); $out.Dispose()
-}
-$archive.Dispose(); $fs.Dispose()
-
-az webapp deploy --resource-group rg-frs-ai-demo --name <webAppName> `
-  --src-path src/WebApp/publish.zip --type zip
+.\scripts\Deploy-WebApp.ps1 `
+  -ResourceGroupName rg-frs-ai-demo `
+  -WebAppName <webAppName>
 ```
+
+The script creates a zip with forward-slash archive entries, which Linux Kudu
+requires. If organizational policy has disabled SCM basic publishing
+credentials, rerun with `-TemporarilyEnableScmBasicAuth`; it restores the
+previous policy value after deployment.
 
 > **Zip deploy fails at "Extract zip" or returns `Status Code: 400`?** Two
 > distinct causes, both seen with this app:
@@ -669,22 +616,14 @@ az webapp deploy --resource-group rg-frs-ai-demo --name <webAppName> `
 >    `Compress-Archive` can contain backslash-separated entries that Kudu's
 >    Linux extractor can't unpack — the deployment log shows *"Deployment
 >    Failed ... ZipDeploy. Extract zip"*, and OneDeploy returns an empty
->    `400`. Use the `System.IO.Compression` packing shown above (verify with
->    `([IO.Compression.ZipFile]::OpenRead((Resolve-Path src/WebApp/publish.zip)).Entries | ? FullName -like '*\*').Count` returning `0`).
+>    `400`. `Deploy-WebApp.ps1` creates the required forward-slash archive
+>    entries automatically.
 > 2. **SCM basic auth disabled.** `az webapp deploy` uses SCM basic auth by
 >    default, but the `scm`/`ftp` `basicPublishingCredentialsPolicies` are
 >    often `allow: false` (org Azure Policy). Temporarily allow it for the
->    deployment and turn it back off afterward:
->
->    ```powershell
->    az resource update -g rg-frs-ai-demo --namespace Microsoft.Web `
->      --parent sites/<webAppName> --resource-type basicPublishingCredentialsPolicies `
->      -n scm --set properties.allow=true
->    # ...run az webapp deploy...
->    az resource update -g rg-frs-ai-demo --namespace Microsoft.Web `
->      --parent sites/<webAppName> --resource-type basicPublishingCredentialsPolicies `
->      -n scm --set properties.allow=false
->    ```
+>    deployment and turn it back off afterward. Use
+>    `Deploy-WebApp.ps1 -TemporarilyEnableScmBasicAuth`, which reads and
+>    restores the prior SCM policy value automatically.
 
 The web identity receives Cosmos read access to `Faces`, contributor access to
 `Uploads` and `Reviews`, Blob Data Contributor on the private `photos`
