@@ -1,0 +1,40 @@
+﻿@page "/"
+@inject IFaceLabWorkbench Workbench
+
+<PageTitle>FaceLab</PageTitle>
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Azure Web App</p>
+        <h1>FaceLab for the browser</h1>
+        <p>
+            Upload images, run the Face API detect/identify/enroll pipeline, and inspect
+            raw call traces without making desktop clients call the Face endpoint directly.
+        </p>
+    </div>
+    <a class="button primary" href="run">Upload images</a>
+</section>
+
+<div class="grid cards">
+    <article class="card">
+        <span>Configuration</span>
+        <strong>@ConfigSummary</strong>
+        <a href="configure">Edit configuration</a>
+    </article>
+    <article class="card">
+        <span>Image storage</span>
+        <strong>Azure Blob Storage</strong>
+        <p>Images are persisted by the configured server-side repository.</p>
+    </article>
+    <article class="card">
+        <span>Execution</span>
+        <strong>Server-side Face API calls</strong>
+        <p>Runs use FaceLab.Core from the Azure-hosted app.</p>
+    </article>
+</div>
+
+@code {
+    private string ConfigSummary => string.IsNullOrWhiteSpace(Workbench.Options.Endpoint)
+        ? "No Face API endpoint configured"
+        : $"{Workbench.Options.Endpoint} / {Workbench.Options.DynamicPersonGroupId}";
+}

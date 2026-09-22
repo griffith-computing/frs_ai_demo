@@ -119,6 +119,7 @@ to it.
 | **Managed Identity** | Single user-assigned identity used by the Function App to authenticate to Storage, Event Hub, Cosmos DB, and the Face API — no connection strings or keys stored in app settings. |
 | **Reviewer Web App** (.NET 10 Razor Pages) | Entra-authenticated review UI for browsing sightings, privately streaming photos, uploading new photos, tracking processing, and recording reviewer decisions. |
 | **Face Lab** (.NET 10 MAUI, Windows desktop) | Standalone configuration test bench. Calls the Face API directly and stores images, runs, and raw call traces in a local SQLite database instead of Blob Storage / Event Hub / Cosmos DB. |
+| **FaceLab Web/Hybrid** (.NET 10 Blazor + MAUI Blazor Hybrid) | Separate FaceLab browser experience for Azure App Service, sharing Razor components with a MAUI Blazor Hybrid shell and reusing `FaceLab.Core`. Web uploads store staged images in a configurable Storage Account container. |
 
 ## Repository layout
 
@@ -129,7 +130,7 @@ to it.
     identity.bicep           # user-assigned managed identity
     network.bicep             # VNet + integration/private-endpoint subnets
     privateendpoints.bicep    # private DNS zones + private endpoints for storage/cosmos/eventhub/face
-    storage.bicep            # storage account + "photos" blob container
+    storage.bicep            # storage account + "photos" and FaceLab image blob containers
     eventhub.bicep            # Event Hub namespace + hub + consumer group
     cosmos.bicep              # Cosmos DB account + database + Faces container
     face.bicep                # Azure AI Face API (Cognitive Services) account
@@ -137,6 +138,7 @@ to it.
     functionapp.bicep         # Function App + Elastic Premium plan + VNet integration + app settings
     rbac.bicep                # role assignments granting the identity access
     webapp.bicep              # reviewer web app + Linux plan + VNet integration + Entra/app settings
+    facelabwebapp.bicep       # FaceLab web app + Linux plan + VNet integration + storage/Face settings
     webrbac.bicep             # least-privilege data-plane roles for the web app identity
 /src/FunctionApp/
   Program.cs                  # DI setup (DefaultAzureCredential, clients)
@@ -164,6 +166,10 @@ to it.
   Services/
     CosmosFaceReviewRepository.cs
     UploadService.cs            # browser upload orchestration + Event Hub enqueue
+/src/FaceLab/
+  FaceLab.Web/                  # Azure App Service-hosted Blazor Web App
+  FaceLab.Shared/               # shared Razor components and FaceLab workbench service
+  FaceLab/                      # MAUI Blazor Hybrid shell for the same shared components
 /src/Desktop/FaceLab.Core/
   FaceLabOptions.cs             # every tunable Face API setting + validation + snapshots
   FaceApiClient.cs              # configuration-driven REST client, dual auth, call tracing
@@ -184,6 +190,7 @@ to it.
   Deploy-Infrastructure.ps1     # resource group and Bicep deployment
   Deploy-FunctionApp.ps1        # Function App publish and zip deployment
   Deploy-WebApp.ps1             # web app publish and Linux-safe zip deployment
+  Deploy-FaceLabWebApp.ps1      # FaceLab web app publish and Linux-safe zip deployment
 ```
 
 ## Deploying the infrastructure
@@ -248,6 +255,7 @@ allowlist JSON.
 | `bulkUploadsMaxConcurrency` | No | `3` | Maximum concurrent browser upload requests (1–10). |
 | `bulkUploadSources` | No | `[]` | Administrator allowlist of storage account/container sources and permitted import modes. |
 | `bulkUploadsImportSchedule` | No | `0 */1 * * * *` | NCRONTAB schedule for processing queued storage imports (once per minute by default). |
+| `faceLabImagesContainerName` | No | `facelab-images` | Blob container used by the FaceLab Web App to store staged images. |
 
 All reused resources must already exist in the deployment resource group. The
 deployment principal must be able to configure them and create their private
@@ -309,6 +317,20 @@ production subscription.
 .\scripts\Deploy-FunctionApp.ps1 `
   -ResourceGroupName rg-frs-ai-demo `
   -FunctionAppName <functionAppName>
+```
+
+## Deploying the FaceLab Web App code
+
+The FaceLab Web App is separate from the reviewer Web App. It is built from
+`src/FaceLab/FaceLab.Web`, reuses `FaceLab.Core`, and stores uploaded/staged
+images in the configured `FaceLabStorage__AccountName` /
+`FaceLabStorage__ContainerName` container. The Bicep deployment provisions a
+dedicated App Service and managed identity for it.
+
+```powershell
+.\scripts\Deploy-FaceLabWebApp.ps1 `
+  -ResourceGroupName rg-frs-ai-demo `
+  -WebAppName <faceLabWebAppName>
 ```
 
 ## Local development
