@@ -48,6 +48,57 @@ public sealed class FaceApiClientTests
     }
 
     [Fact]
+    public async Task DetectFacesAsync_requests_attributes_landmarks_and_recognition_model()
+    {
+        var handler = new StubHttpMessageHandler().Enqueue(HttpStatusCode.OK, DetectResponse);
+        var client = new FaceApiClient(new HttpClient(handler), TestOptions.Create());
+
+        await client.DetectFacesAsync(new byte[] { 1 }, CancellationToken.None);
+
+        var query = Assert.Single(handler.Requests).Uri.Query;
+        Assert.Contains("returnFaceAttributes=headPose,mask,qualityForRecognition", Uri.UnescapeDataString(query));
+        Assert.Contains("returnFaceLandmarks=true", query);
+        Assert.Contains("returnRecognitionModel=true", query);
+    }
+
+    [Fact]
+    public async Task DetectFacesAsync_parses_head_pose_mask_quality_recognition_model_and_landmarks()
+    {
+        const string response =
+            """
+            [{
+                "faceId":"face-1",
+                "faceRectangle":{"top":10,"left":20,"width":30,"height":40},
+                "recognitionModel":"recognition_04",
+                "faceAttributes":{
+                    "headPose":{"pitch":1.5,"roll":-2.5,"yaw":3.5},
+                    "mask":{"noseAndMouthCovered":true,"type":"faceMask"},
+                    "qualityForRecognition":"high"
+                },
+                "faceLandmarks":{
+                    "pupilLeft":{"x":10.1,"y":20.2},
+                    "noseTip":{"x":15.5,"y":25.5}
+                }
+            }]
+            """;
+        var handler = new StubHttpMessageHandler().Enqueue(HttpStatusCode.OK, response);
+        var client = new FaceApiClient(new HttpClient(handler), TestOptions.Create());
+
+        var face = Assert.Single(await client.DetectFacesAsync(new byte[] { 1 }, CancellationToken.None));
+
+        Assert.Equal("recognition_04", face.RecognitionModel);
+        Assert.Equal(1.5, face.FaceAttributes!.HeadPose!.Pitch);
+        Assert.Equal(-2.5, face.FaceAttributes.HeadPose.Roll);
+        Assert.Equal(3.5, face.FaceAttributes.HeadPose.Yaw);
+        Assert.True(face.FaceAttributes.Mask!.NoseAndMouthCovered);
+        Assert.Equal("faceMask", face.FaceAttributes.Mask.Type);
+        Assert.Equal("high", face.FaceAttributes.QualityForRecognition);
+        Assert.Equal(10.1, face.FaceLandmarks!.PupilLeft!.X);
+        Assert.Equal(20.2, face.FaceLandmarks.PupilLeft.Y);
+        Assert.Equal(15.5, face.FaceLandmarks.NoseTip!.X);
+    }
+
+    [Fact]
     public async Task DetectFacesAsync_sends_the_subscription_key_header_in_key_mode()
     {
         var handler = new StubHttpMessageHandler().Enqueue(HttpStatusCode.OK, DetectResponse);

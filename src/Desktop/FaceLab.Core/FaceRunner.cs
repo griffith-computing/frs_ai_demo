@@ -168,7 +168,8 @@ public sealed class FaceRunner : IFaceRunner
             Top = face.FaceRectangle?.Top ?? 0,
             Left = face.FaceRectangle?.Left ?? 0,
             Width = face.FaceRectangle?.Width ?? 0,
-            Height = face.FaceRectangle?.Height ?? 0
+            Height = face.FaceRectangle?.Height ?? 0,
+            DebugInfoJson = FaceDebugInfo.FromDetectedFace(face)?.ToJson()
         };
 
         var candidate = face.FaceId is not null && identifiedByFaceId.TryGetValue(face.FaceId, out var identifyResult)

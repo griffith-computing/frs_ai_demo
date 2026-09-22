@@ -33,6 +33,11 @@
                                 <Label FontSize="12" Text="{Binding EnrolledPersonId, StringFormat='Enrolled person: {0}'}" />
                                 <Label FontSize="12" Text="{Binding Confidence, StringFormat='Confidence: {0:F3}'}" />
                                 <Label FontSize="12" Text="{Binding ErrorMessage}" TextColor="Firebrick" />
+                                <Button
+                                    HorizontalOptions="Start"
+                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:RunDetailViewModel}}, Path=ShowDebugInfoCommand}"
+                                    CommandParameter="{Binding .}"
+                                    Text="Debug info" />
                             </VerticalStackLayout>
                         </Border>
                     </DataTemplate>
