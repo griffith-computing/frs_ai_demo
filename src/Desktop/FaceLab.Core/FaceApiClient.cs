@@ -78,7 +78,8 @@ public sealed class FaceApiClient : IFaceApiClient
     public async Task<IReadOnlyList<DetectedFace>> DetectFacesAsync(byte[] photo, CancellationToken cancellationToken)
     {
         var url = $"{Options.ApiVersionSegment}/detect" +
-                  $"?returnFaceId=true&recognitionModel={Options.RecognitionModel}&detectionModel={Options.DetectionModel}";
+                  $"?returnFaceId=true&recognitionModel={Options.RecognitionModel}&detectionModel={Options.DetectionModel}" +
+                  "&returnFaceAttributes=headPose,mask,qualityForRecognition&returnFaceLandmarks=true&returnRecognitionModel=true";
 
         var body = await SendAsync(
             HttpMethod.Post,

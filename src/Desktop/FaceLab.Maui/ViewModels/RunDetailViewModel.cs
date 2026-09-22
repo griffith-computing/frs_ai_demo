@@ -116,6 +116,22 @@ public sealed partial class RunDetailViewModel : ObservableObject, IQueryAttribu
         }
     }
 
+    /// <summary>Shows a dialog with the full detect-time debug data (head pose, mask, quality, landmarks) for one face.</summary>
+    [RelayCommand]
+    private async Task ShowDebugInfoAsync(FaceResultRecord? face)
+    {
+        if (face is null)
+        {
+            return;
+        }
+
+        var rectangle = new FaceRectangle { Top = face.Top, Left = face.Left, Width = face.Width, Height = face.Height };
+        var debugInfo = FaceDebugInfo.FromJson(face.DebugInfoJson);
+        var message = FaceDebugInfoFormatter.Format(rectangle, debugInfo);
+
+        await Shell.Current.DisplayAlertAsync($"Debug info - {face.FaceId ?? "face"}", message, "Close");
+    }
+
     /// <summary>Re-runs the same image against the configuration currently being edited.</summary>
     [RelayCommand]
     private async Task RerunAsync()

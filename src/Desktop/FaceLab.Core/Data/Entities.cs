@@ -118,6 +118,13 @@ public sealed class FaceResultRecord
     public string? EnrolledPersonId { get; set; }
 
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Raw JSON of the recognition model, head pose, mask and landmark attributes captured for
+    /// this face at detect time (see <see cref="FaceDebugInfo"/>). Null if the Face API did not
+    /// return any of that data.
+    /// </summary>
+    public string? DebugInfoJson { get; set; }
 }
 
 public sealed class CallTraceRecord

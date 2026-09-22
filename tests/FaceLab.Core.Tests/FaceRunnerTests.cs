@@ -299,6 +299,31 @@ public sealed class FaceRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_captures_detect_debug_info_on_the_face_result()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        client.DetectedFaces.Add(new DetectedFace
+        {
+            FaceId = "face-1",
+            FaceRectangle = new FaceRectangle { Top = 1, Left = 2, Width = 3, Height = 4 },
+            RecognitionModel = "recognition_04",
+            FaceAttributes = new FaceAttributes
+            {
+                HeadPose = new HeadPose { Pitch = 1, Roll = 2, Yaw = 3 }
+            }
+        });
+
+        var run = await new FaceRunner(client, _repository).RunAsync(await ImportAsync(), options, CancellationToken.None);
+
+        var face = Assert.Single(run.Faces);
+        Assert.NotNull(face.DebugInfoJson);
+        var debugInfo = FaceDebugInfo.FromJson(face.DebugInfoJson);
+        Assert.Equal("recognition_04", debugInfo!.RecognitionModel);
+        Assert.Equal(1, debugInfo.FaceAttributes!.HeadPose!.Pitch);
+    }
+
+    [Fact]
     public async Task TestConnectionAsync_returns_the_last_trace_even_when_the_call_fails()
     {
         var options = TestOptions.Create();
