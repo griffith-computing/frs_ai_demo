@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FaceLab.Maui.Views.PeoplePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:data="clr-namespace:FaceLab.Core.Data;assembly=FaceLab.Core"
+    xmlns:vm="clr-namespace:FaceLab.Maui.ViewModels"
+    x:DataType="vm:PeopleViewModel"
+    Title="People">
+
+    <Grid Padding="20" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+
+        <Label Grid.Row="0" FontSize="20" FontAttributes="Bold" Text="Locally tracked people" />
+        <Label
+            Grid.Row="1"
+            FontSize="12"
+            TextColor="Gray"
+            Text="Person ids returned by Identify or created by enrollment, with first/last seen timestamps - the local analog of the Cosmos Faces container." />
+
+        <HorizontalStackLayout Grid.Row="2" Spacing="8">
+            <Button Command="{Binding LoadCommand}" Text="Refresh" />
+            <Label Text="{Binding StatusMessage}" VerticalOptions="Center" />
+        </HorizontalStackLayout>
+
+        <CollectionView Grid.Row="3" ItemsSource="{Binding People}" SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="data:PersonRecord">
+                    <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontAttributes="Bold" FontFamily="Consolas" Text="{Binding PersonId}" />
+                            <Label FontSize="12" Text="{Binding DynamicPersonGroupId, StringFormat='Group: {0}'}" />
+                            <Label FontSize="12" Text="{Binding SightingCount, StringFormat='Sightings: {0}'}" />
+                            <Label FontSize="12" Text="{Binding LastConfidence, StringFormat='Last confidence: {0:F3}'}" />
+                            <Label FontSize="12" Text="{Binding FirstSeenUtc, StringFormat='First seen: {0:g}'}" />
+                            <Label FontSize="12" Text="{Binding LastSeenUtc, StringFormat='Last seen: {0:g}'}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
+</ContentPage>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FaceLab.Maui.Views.RunDetailPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:data="clr-namespace:FaceLab.Core.Data;assembly=FaceLab.Core"
+    xmlns:vm="clr-namespace:FaceLab.Maui.ViewModels"
+    x:DataType="vm:RunDetailViewModel"
+    Title="Run detail">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+
+            <Label FontSize="20" FontAttributes="Bold" Text="{Binding Headline}" />
+            <Label IsVisible="{Binding StatusMessage, Converter={StaticResource StringNotEmpty}}" Text="{Binding StatusMessage}" TextColor="Firebrick" />
+
+            <HorizontalStackLayout Spacing="8">
+                <Button Command="{Binding RerunCommand}" Text="Re-run with current configuration" />
+                <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+
+            <Image Aspect="AspectFit" HeightRequest="260" HorizontalOptions="Start" Source="{Binding Preview}" />
+
+            <Label FontSize="16" FontAttributes="Bold" Text="Faces" />
+            <CollectionView ItemsSource="{Binding Faces}" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="data:FaceResultRecord">
+                        <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">
+                            <VerticalStackLayout Spacing="2">
+                                <Label FontAttributes="Bold" Text="{Binding Outcome}" />
+                                <Label FontFamily="Consolas" FontSize="12" Text="{Binding FaceId, StringFormat='faceId: {0}'}" />
+                                <Label FontSize="12" Text="{Binding MatchedPersonId, StringFormat='Matched person: {0}'}" />
+                                <Label FontSize="12" Text="{Binding EnrolledPersonId, StringFormat='Enrolled person: {0}'}" />
+                                <Label FontSize="12" Text="{Binding Confidence, StringFormat='Confidence: {0:F3}'}" />
+                                <Label FontSize="12" Text="{Binding ErrorMessage}" TextColor="Firebrick" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <Label FontSize="16" FontAttributes="Bold" Text="Raw Face API calls" />
+            <CollectionView ItemsSource="{Binding Traces}" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="data:CallTraceRecord">
+                        <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">
+                            <VerticalStackLayout Spacing="2">
+                                <Label FontAttributes="Bold" Text="{Binding Operation}" />
+                                <Label FontFamily="Consolas" FontSize="12" Text="{Binding Url}" />
+                                <Label FontSize="12" Text="{Binding StatusCode, StringFormat='HTTP {0}'}" />
+                                <Label FontSize="12" Text="{Binding ElapsedMs, StringFormat='Elapsed: {0} ms'}" />
+                                <Label FontFamily="Consolas" FontSize="11" Text="{Binding RequestSummary}" />
+                                <Editor
+                                    AutoSize="TextChanges"
+                                    FontFamily="Consolas"
+                                    FontSize="11"
+                                    IsReadOnly="True"
+                                    Text="{Binding ResponseBody}" />
+                                <Label FontSize="12" Text="{Binding Error}" TextColor="Firebrick" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <Label FontSize="16" FontAttributes="Bold" Text="Configuration used for this run" />
+            <Editor
+                AutoSize="TextChanges"
+                FontFamily="Consolas"
+                FontSize="12"
+                IsReadOnly="True"
+                Text="{Binding ConfigSnapshot}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

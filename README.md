@@ -118,6 +118,7 @@ to it.
 | **Cosmos DB** (NoSQL API, `Faces` container, partition key `/personId`) | One document per recognized person: `firstSeenUtc`, `lastSeenUtc`, and a `recognitionHistory` array of every sighting (timestamp, blob URL, confidence). |
 | **Managed Identity** | Single user-assigned identity used by the Function App to authenticate to Storage, Event Hub, Cosmos DB, and the Face API — no connection strings or keys stored in app settings. |
 | **Reviewer Web App** (.NET 10 Razor Pages) | Entra-authenticated review UI for browsing sightings, privately streaming photos, uploading new photos, tracking processing, and recording reviewer decisions. |
+| **Face Lab** (.NET 10 MAUI, Windows desktop) | Standalone configuration test bench. Calls the Face API directly and stores images, runs, and raw call traces in a local SQLite database instead of Blob Storage / Event Hub / Cosmos DB. |
 
 ## Repository layout
 
@@ -163,6 +164,22 @@ to it.
   Services/
     CosmosFaceReviewRepository.cs
     UploadService.cs            # browser upload orchestration + Event Hub enqueue
+/src/Desktop/FaceLab.Core/
+  FaceLabOptions.cs             # every tunable Face API setting + validation + snapshots
+  FaceApiClient.cs              # configuration-driven REST client, dual auth, call tracing
+  FaceRunner.cs                 # detect -> identify -> enroll pipeline + connection test
+  FaceApiModels.cs              # Face API REST request/response DTOs
+  CallTrace.cs                  # one captured HTTP call (request, response, timing)
+  Data/
+    Entities.cs                 # images (bytes), runs, face results, traces, people, profiles
+    FaceLabDbContext.cs         # local SQLite schema
+    FaceLabRepository.cs        # persistence for images, runs, people, config profiles
+/src/Desktop/FaceLab.Maui/
+  MauiProgram.cs                # DI, SQLite path, HTTP handler, credential factory
+  AppShell.xaml                 # config / upload / history / people tabs
+  Views/                        # config, upload, history, people, run detail pages
+  ViewModels/                   # MVVM view models for each page
+  Services/                     # config persistence (SecureStorage + preferences)
 /scripts/
   Deploy-Infrastructure.ps1     # resource group and Bicep deployment
   Deploy-FunctionApp.ps1        # Function App publish and zip deployment
@@ -396,6 +413,43 @@ is different: Cosmos DB has public network access disabled, so direct
 verification still requires VPN/ExpressRoute or execution inside the VNet, plus
 Cosmos data-plane permissions for the signed-in identity.
 
+## Face Lab desktop test bench
+
+`src/Desktop/FaceLab.Maui` is a .NET 10 MAUI Windows desktop app for quickly
+testing Face API configuration changes without redeploying anything. It calls
+the Face API **directly** — no Blob Storage, Event Hub, Function App, or Cosmos
+DB — and stores every uploaded image (bytes and all), run result, and raw HTTP
+call trace in a **local SQLite database** created on first launch at
+`%LOCALAPPDATA%` (MAUI's `FileSystem.AppDataDirectory`) as `facelab.db`.
+
+It runs the same pipeline as `ProcessPhotoFunction`: ensure the Dynamic Person
+Group exists, `Detect`, `Identify`, then create a person, add a persisted face,
+and add the person to the group for anything unmatched.
+
+```powershell
+dotnet build src/Desktop/FaceLab.Maui/FaceLab.Maui.csproj
+dotnet run --project src/Desktop/FaceLab.Maui/FaceLab.Maui.csproj
+```
+
+Requires the MAUI Windows workload (`dotnet workload install maui-windows`).
+
+| Screen | Purpose |
+| --- | --- |
+| **Config** | Every Face API knob (endpoint, auth mode, API version segment, detection/recognition model, group ID, confidence threshold, candidate count, identify batch size, operation timeout/poll interval, auto-enroll, max image size). Validates the configuration, runs a live connection test showing the raw request/response, and saves/loads named profiles. |
+| **Upload** | Stage one or many images (duplicates detected by SHA-256, oversized files rejected up front), then run them against a snapshot of the current configuration. |
+| **History** | Every run with its status, detected face count, duration, and per-face outcome. Open a run to see the exact configuration used and every Face API call — URL, status, elapsed time, and response body. |
+| **People** | The locally tracked person directory (the analog of the Cosmos `Faces` container): person ID, sighting count, first/last seen, and last confidence. |
+
+Configuration persistence: everything except the subscription key is stored in
+MAUI `Preferences`; the key goes to `SecureStorage` and is never written to the
+local database, a config profile, or a run snapshot. In
+`DefaultAzureCredential` mode the app uses the developer credential chain
+(managed identity is excluded) and requests
+`https://cognitiveservices.azure.com/.default`.
+
+All testable logic lives in the plain `net10.0` `FaceLab.Core` library so it is
+covered by `tests/FaceLab.Core.Tests`; the MAUI project is a thin UI shell.
+
 ## Synthetic face SDK benchmark
 
 `src/Tools/FaceBenchmark` generates a versioned synthetic face-verification
@@ -587,11 +641,17 @@ dotnet build
 cd src/Tools/PhotoUploadHarness
 dotnet build
 
+# Face Lab desktop test bench (Windows only; needs the maui-windows workload)
+dotnet build src/Desktop/FaceLab.Maui/FaceLab.Maui.csproj
+dotnet test tests/FaceLab.Core.Tests/FaceLab.Core.Tests.csproj
+
 # Synthetic face benchmark
 uv sync --project src/Tools/FaceBenchmark
 uv run --project src/Tools/FaceBenchmark python -m unittest discover -s src/Tools/FaceBenchmark/tests -t src/Tools/FaceBenchmark -v
 
 # Complete mixed-target solution and tests (.NET 10 SDK)
+# Note: FaceLab.Maui targets Windows only, so the solution build requires
+# Windows plus the maui-windows workload.
 dotnet build FrsAiDemo.slnx
 dotnet test tests/PhotoUploadHarness.Tests/FrsAiDemo.PhotoUploadHarness.Tests.csproj
 dotnet test tests/WebApp.Tests/FrsAiDemo.WebApp.Tests.csproj
@@ -625,3 +685,9 @@ az bicep build --file infra/main.bicep --stdout
 - **Face API regional/access availability**: Face API `Identify` and Person
   Directory features require Microsoft's Limited Access approval in some
   subscriptions/regions — apply before relying on this in production.
+- **Face Lab writes to the real Face API.** The desktop test bench enrolls
+  people into the configured Dynamic Person Group exactly like the pipeline
+  does, so point it at a non-production Face resource (or turn off
+  auto-enroll) unless you intend to mutate the directory. Its local SQLite
+  database is scratch data — it uses `EnsureCreated` rather than migrations
+  and can be reset from the app.

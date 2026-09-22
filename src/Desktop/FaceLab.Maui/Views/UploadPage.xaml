@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="FaceLab.Maui.Views.UploadPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:FaceLab.Maui.ViewModels"
+    x:DataType="vm:UploadViewModel"
+    x:Name="PageRoot"
+    Title="Upload and run">
+
+    <Grid Padding="20" RowDefinitions="Auto,Auto,Auto,*,Auto,*" RowSpacing="10">
+
+        <Label Grid.Row="0" FontSize="20" FontAttributes="Bold" Text="Send images to the Face API" />
+
+        <Label
+            Grid.Row="1"
+            FontFamily="Consolas"
+            FontSize="12"
+            TextColor="Gray"
+            Text="{Binding ConfigSummary}" />
+
+        <HorizontalStackLayout Grid.Row="2" Spacing="8">
+            <Button Command="{Binding PickImagesCommand}" Text="Pick images..." />
+            <Button Command="{Binding ClearImagesCommand}" Text="Clear staged" />
+            <Button Command="{Binding RunCommand}" IsEnabled="{Binding CanRun}" Text="Run pipeline" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" VerticalOptions="Center" />
+        </HorizontalStackLayout>
+
+        <CollectionView Grid.Row="3" ItemsSource="{Binding Images}">
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout Orientation="Horizontal" ItemSpacing="10" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:StagedImage">
+                    <VerticalStackLayout Padding="6" WidthRequest="150">
+                        <Image Aspect="AspectFit" HeightRequest="110" Source="{Binding Preview}" />
+                        <Label FontSize="11" LineBreakMode="TailTruncation" Text="{Binding FileName}" />
+                        <Label FontSize="10" TextColor="Gray" Text="{Binding SizeText}" />
+                    </VerticalStackLayout>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Label Grid.Row="4" FontAttributes="Bold" Text="{Binding StatusMessage}" />
+
+        <CollectionView
+            Grid.Row="5"
+            ItemsSource="{Binding Results}"
+            SelectionChanged="OnResultSelected"
+            SelectionMode="Single">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:RunSummary">
+                    <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">
+                        <VerticalStackLayout Spacing="4">
+                            <Label FontAttributes="Bold" Text="{Binding Headline}" />
+                            <Label FontFamily="Consolas" FontSize="12" Text="{Binding Detail}" />
+                            <Label FontSize="11" TextColor="Gray" Text="Select this result to see every raw Face API call." />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
+</ContentPage>
