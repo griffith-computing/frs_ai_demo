@@ -102,8 +102,26 @@ public sealed class FaceOverlayView : Grid
     private void FacePropertyChanged(object? sender, PropertyChangedEventArgs e) =>
         _graphicsView.Invalidate();
 
-    private void FacesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+    private void FacesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null)
+        {
+            foreach (FaceOverlayItem face in e.OldItems)
+            {
+                face.PropertyChanged -= FacePropertyChanged;
+            }
+        }
+
+        if (e.NewItems is not null)
+        {
+            foreach (FaceOverlayItem face in e.NewItems)
+            {
+                face.PropertyChanged += FacePropertyChanged;
+            }
+        }
+
         _graphicsView.Invalidate();
+    }
 }
 
 public sealed class FaceOverlayDrawable : IDrawable
