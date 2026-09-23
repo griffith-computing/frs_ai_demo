@@ -65,6 +65,8 @@ public sealed partial class RunDetailViewModel : ObservableObject, IQueryAttribu
 
     public ObservableCollection<FaceResultRecord> Faces { get; } = new();
 
+    public ObservableCollection<FaceOverlayItem> FaceOverlays { get; } = new();
+
     public ObservableCollection<CallTraceRecord> Traces { get; } = new();
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
@@ -98,9 +100,11 @@ public sealed partial class RunDetailViewModel : ObservableObject, IQueryAttribu
         StatusMessage = record.ErrorMessage ?? string.Empty;
 
         Faces.Clear();
+        FaceOverlays.Clear();
         foreach (var face in record.Faces)
         {
             Faces.Add(face);
+            FaceOverlays.Add(new FaceOverlayItem(face));
         }
 
         Traces.Clear();
