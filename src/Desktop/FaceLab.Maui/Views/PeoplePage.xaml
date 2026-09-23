@@ -8,21 +8,42 @@
     x:DataType="vm:PeopleViewModel"
     Title="People">
 
-    <Grid Padding="20" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+    <Grid Padding="20" RowDefinitions="Auto,Auto,Auto,Auto,220,Auto,*" RowSpacing="10">
 
-        <Label Grid.Row="0" FontSize="20" FontAttributes="Bold" Text="Locally tracked people" />
+        <Label Grid.Row="0" FontSize="20" FontAttributes="Bold" Text="Identity lifecycle" />
         <Label
             Grid.Row="1"
             FontSize="12"
             TextColor="Gray"
-            Text="Person ids returned by Identify or created by enrollment, with first/last seen timestamps - the local analog of the Cosmos Faces container." />
+            Text="Provisional identities remain outside the searchable dynamic group until enough distinct, qualifying captures confirm them." />
 
         <HorizontalStackLayout Grid.Row="2" Spacing="8">
             <Button Command="{Binding LoadCommand}" Text="Refresh" />
             <Label Text="{Binding StatusMessage}" VerticalOptions="Center" />
         </HorizontalStackLayout>
 
-        <CollectionView Grid.Row="3" ItemsSource="{Binding People}" SelectionMode="None">
+        <Label Grid.Row="3" FontSize="16" FontAttributes="Bold" Text="Provisional identities" />
+        <CollectionView Grid.Row="4" ItemsSource="{Binding ProvisionalIdentities}" SelectionMode="None">
+            <CollectionView.EmptyView>
+                <Label FontSize="12" TextColor="Gray" Text="No provisional identities." />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="data:ManagedIdentityRecord">
+                    <Border Margin="0,4" Padding="10" Stroke="DarkGoldenrod" StrokeThickness="1">
+                        <VerticalStackLayout Spacing="2">
+                            <Label FontAttributes="Bold" FontFamily="Consolas" Text="{Binding PersonId}" />
+                            <Label FontSize="12" Text="{Binding EvidenceCount, StringFormat='Qualifying images: {0}'}" />
+                            <Label FontSize="12" Text="{Binding LastConfidence, StringFormat='Last verification confidence: {0:F3}'}" />
+                            <Label FontSize="12" Text="{Binding LastSeenUtc, StringFormat='Last seen: {0:g}'}" />
+                            <Label FontSize="12" Text="{Binding ExpiresUtc, StringFormat='Expires: {0:g}'}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Label Grid.Row="5" FontSize="16" FontAttributes="Bold" Text="Active people" />
+        <CollectionView Grid.Row="6" ItemsSource="{Binding People}" SelectionMode="None">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="data:PersonRecord">
                     <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">

@@ -56,7 +56,7 @@ public sealed class FaceLabOptions
 
     public double ConfidenceThreshold { get; set; } = 0.6;
 
-    public int MaxCandidatesReturned { get; set; } = 1;
+    public int MaxCandidatesReturned { get; set; } = 2;
 
     public int OperationTimeoutSeconds { get; set; } = 30;
 
@@ -66,6 +66,30 @@ public sealed class FaceLabOptions
     public bool AutoEnrollUnmatchedFaces { get; set; } = true;
 
     public bool EnsureDynamicPersonGroupExists { get; set; } = true;
+
+    public string RequiredEnrollmentQuality { get; set; } = "high";
+
+    public int MinimumEnrollmentFaceSizePixels { get; set; } = 100;
+
+    public int EnrollmentEdgeMarginPixels { get; set; } = 1;
+
+    public double MaximumEnrollmentYawDegrees { get; set; } = 15;
+
+    public double MaximumEnrollmentPitchDegrees { get; set; } = 15;
+
+    public double MaximumEnrollmentRollDegrees { get; set; } = 10;
+
+    public int RequiredEnrollmentImages { get; set; } = 2;
+
+    public double ProvisionalVerificationThreshold { get; set; } = 0.8;
+
+    public double CandidateConfidenceMargin { get; set; } = 0.1;
+
+    public double TemplateLearningThreshold { get; set; } = 0.9;
+
+    public int MaximumManagedFaceTemplates { get; set; } = 5;
+
+    public int ProvisionalExpirationDays { get; set; } = 30;
 
     public int MaxImageSizeBytes { get; set; } = FaceApiMaxImageBytes;
 
@@ -126,6 +150,70 @@ public sealed class FaceLabOptions
         if (MaxCandidatesReturned < 1)
         {
             errors.Add("Max candidates returned must be at least 1.");
+        }
+
+        if (MaxCandidatesReturned < 2 && CandidateConfidenceMargin > 0)
+        {
+            errors.Add("Max candidates returned must be at least 2 when a candidate confidence margin is enabled.");
+        }
+
+        if (!new[] { "low", "medium", "high" }.Contains(
+                RequiredEnrollmentQuality,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            errors.Add("Required enrollment quality must be low, medium, or high.");
+        }
+
+        if (MinimumEnrollmentFaceSizePixels < 1)
+        {
+            errors.Add("Minimum enrollment face size must be greater than zero.");
+        }
+
+        if (EnrollmentEdgeMarginPixels < 0)
+        {
+            errors.Add("Enrollment edge margin cannot be negative.");
+        }
+
+        if (MaximumEnrollmentYawDegrees is < 0 or > 90 ||
+            MaximumEnrollmentPitchDegrees is < 0 or > 90 ||
+            MaximumEnrollmentRollDegrees is < 0 or > 180)
+        {
+            errors.Add("Enrollment pose limits must be non-negative and within valid angular ranges.");
+        }
+
+        if (RequiredEnrollmentImages < 2)
+        {
+            errors.Add("Required enrollment images must be at least 2.");
+        }
+
+        if (ProvisionalVerificationThreshold is < 0 or > 1)
+        {
+            errors.Add("Provisional verification threshold must be between 0 and 1.");
+        }
+
+        if (CandidateConfidenceMargin is < 0 or > 1)
+        {
+            errors.Add("Candidate confidence margin must be between 0 and 1.");
+        }
+
+        if (TemplateLearningThreshold is < 0 or > 1)
+        {
+            errors.Add("Template learning threshold must be between 0 and 1.");
+        }
+
+        if (TemplateLearningThreshold < ConfidenceThreshold)
+        {
+            errors.Add("Template learning threshold cannot be lower than the active match confidence threshold.");
+        }
+
+        if (MaximumManagedFaceTemplates < RequiredEnrollmentImages)
+        {
+            errors.Add("Maximum managed face templates cannot be lower than required enrollment images.");
+        }
+
+        if (ProvisionalExpirationDays < 1)
+        {
+            errors.Add("Provisional expiration days must be greater than zero.");
         }
 
         if (IdentifyBatchSize is < 1 or > 10)

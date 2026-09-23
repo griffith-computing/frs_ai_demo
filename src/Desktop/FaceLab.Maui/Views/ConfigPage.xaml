@@ -57,13 +57,54 @@
 
             <HorizontalStackLayout Spacing="8">
                 <CheckBox IsChecked="{Binding Options.AutoEnrollUnmatchedFaces}" />
-                <Label VerticalOptions="Center" Text="Auto-enroll unmatched faces (writes to the real person directory)" />
+                <Label VerticalOptions="Center" Text="Automate provisional enrollment (writes to the real person directory; promotion is delayed)" />
             </HorizontalStackLayout>
 
             <HorizontalStackLayout Spacing="8">
                 <CheckBox IsChecked="{Binding Options.EnsureDynamicPersonGroupExists}" />
                 <Label VerticalOptions="Center" Text="Ensure the dynamic person group exists before each run" />
             </HorizontalStackLayout>
+
+            <Label FontSize="18" FontAttributes="Bold" Text="Automated enrollment safety policy" />
+            <Label
+                FontSize="12"
+                TextColor="Gray"
+                Text="A first qualifying capture creates a provisional Person Directory entry outside the dynamic group. Distinct qualifying captures promote it automatically." />
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                <Label Grid.Row="0" Grid.Column="0" Text="Required recognition quality" />
+                <Label Grid.Row="0" Grid.Column="1" Text="Minimum face size (pixels)" />
+                <Entry Grid.Row="1" Grid.Column="0" Text="{Binding Options.RequiredEnrollmentQuality}" />
+                <Entry Grid.Row="1" Grid.Column="1" Keyboard="Numeric" Text="{Binding Options.MinimumEnrollmentFaceSizePixels}" />
+
+                <Label Grid.Row="2" Grid.Column="0" Text="Required distinct images" />
+                <Label Grid.Row="2" Grid.Column="1" Text="Provisional expiry (days)" />
+                <Entry Grid.Row="3" Grid.Column="0" Keyboard="Numeric" Text="{Binding Options.RequiredEnrollmentImages}" />
+                <Entry Grid.Row="3" Grid.Column="1" Keyboard="Numeric" Text="{Binding Options.ProvisionalExpirationDays}" />
+
+                <Label Grid.Row="4" Grid.Column="0" Text="Provisional verification threshold" />
+                <Label Grid.Row="4" Grid.Column="1" Text="Candidate confidence margin" />
+                <Entry Grid.Row="5" Grid.Column="0" Keyboard="Numeric" Text="{Binding Options.ProvisionalVerificationThreshold}" />
+                <Entry Grid.Row="5" Grid.Column="1" Keyboard="Numeric" Text="{Binding Options.CandidateConfidenceMargin}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto">
+                <Label Grid.Row="0" Grid.Column="0" Text="Maximum yaw (degrees)" />
+                <Label Grid.Row="0" Grid.Column="1" Text="Maximum pitch (degrees)" />
+                <Label Grid.Row="0" Grid.Column="2" Text="Maximum roll (degrees)" />
+                <Entry Grid.Row="1" Grid.Column="0" Keyboard="Numeric" Text="{Binding Options.MaximumEnrollmentYawDegrees}" />
+                <Entry Grid.Row="1" Grid.Column="1" Keyboard="Numeric" Text="{Binding Options.MaximumEnrollmentPitchDegrees}" />
+                <Entry Grid.Row="1" Grid.Column="2" Keyboard="Numeric" Text="{Binding Options.MaximumEnrollmentRollDegrees}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12" RowDefinitions="Auto,Auto">
+                <Label Grid.Row="0" Grid.Column="0" Text="Image-edge margin (pixels)" />
+                <Label Grid.Row="0" Grid.Column="1" Text="Template learning threshold" />
+                <Label Grid.Row="0" Grid.Column="2" Text="Maximum managed templates" />
+                <Entry Grid.Row="1" Grid.Column="0" Keyboard="Numeric" Text="{Binding Options.EnrollmentEdgeMarginPixels}" />
+                <Entry Grid.Row="1" Grid.Column="1" Keyboard="Numeric" Text="{Binding Options.TemplateLearningThreshold}" />
+                <Entry Grid.Row="1" Grid.Column="2" Keyboard="Numeric" Text="{Binding Options.MaximumManagedFaceTemplates}" />
+            </Grid>
 
             <HorizontalStackLayout Spacing="8">
                 <Button Command="{Binding SaveCommand}" Text="Save configuration" />

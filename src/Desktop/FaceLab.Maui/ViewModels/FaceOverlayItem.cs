@@ -12,8 +12,10 @@ public sealed partial class FaceOverlayItem : ObservableObject
         Record.MatchedPersonId is not null
             ? $"Matched person: {Record.MatchedPersonId}"
             : Record.EnrolledPersonId is not null
-                ? $"Enrolled person: {Record.EnrolledPersonId}"
-                : $"Face: {Record.FaceId ?? "unknown"}";
+                ? $"Promoted person: {Record.EnrolledPersonId}"
+                : Record.ProvisionalPersonId is not null
+                    ? $"Provisional person: {Record.ProvisionalPersonId}"
+                    : $"Face: {Record.FaceId ?? "unknown"}";
 
     public IReadOnlyList<LandmarkPoint> Landmarks { get; }
 

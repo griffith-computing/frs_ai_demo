@@ -444,9 +444,23 @@ DB — and stores every uploaded image (bytes and all), run result, and raw HTTP
 call trace in a **local SQLite database** created on first launch at
 `%LOCALAPPDATA%` (MAUI's `FileSystem.AppDataDirectory`) as `facelab.db`.
 
-It runs the same pipeline as `ProcessPhotoFunction`: ensure the Dynamic Person
-Group exists, `Detect`, `Identify`, then create a person, add a persisted face,
-and add the person to the group for anything unmatched.
+It runs a safety-oriented variant of the production pipeline. After `Detect`
+and `Identify`, a strict automated quality gate checks recognition quality,
+mask coverage, head pose, face size, and whether the face touches an image
+edge. The first qualifying unmatched face creates a **provisional** Person
+Directory entry outside the Dynamic Person Group. Later qualifying images are
+verified one-to-one against every unexpired provisional entry. The person is
+added to the searchable group only after two distinct source images agree.
+Ambiguous candidates and weak captures remain deferred rather than forcing a
+match or enrollment.
+
+The conservative defaults require Face API quality `high`, no covered
+nose/mouth, yaw and pitch within 15 degrees, roll within 10 degrees, a
+100-by-100-pixel face, provisional verification confidence of 0.80, and a 0.10
+lead over the next candidate. Unconfirmed entries expire after 30 days. Active
+app-managed identities can learn from distinct qualifying sightings only at
+0.90 confidence or higher, up to five templates. These values are configurable
+and are captured in every run snapshot.
 
 ```powershell
 dotnet build src/Desktop/FaceLab.Maui/FaceLab.Maui.csproj
@@ -457,10 +471,10 @@ Requires the MAUI Windows workload (`dotnet workload install maui-windows`).
 
 | Screen | Purpose |
 | --- | --- |
-| **Config** | Every Face API knob (endpoint, auth mode, API version segment, detection/recognition model, group ID, confidence threshold, candidate count, identify batch size, operation timeout/poll interval, auto-enroll, max image size). Validates the configuration, runs a live connection test showing the raw request/response, and saves/loads named profiles. |
+| **Config** | Face API settings plus provisional enrollment, quality, pose, ambiguity, expiry, and guarded template-learning policy. Validates the configuration, runs a live connection test showing the raw request/response, and saves/loads named profiles. |
 | **Upload** | Stage one or many images (duplicates detected by SHA-256, oversized files rejected up front), then run them against a snapshot of the current configuration. |
 | **History** | Every run with its status, detected face count, duration, and per-face outcome. Open a run to see the exact configuration used and every Face API call — URL, status, elapsed time, and response body. |
-| **People** | The locally tracked person directory (the analog of the Cosmos `Faces` container): person ID, sighting count, first/last seen, and last confidence. |
+| **People** | Provisional identities with evidence count and expiry, followed by active people with sighting count, first/last seen, and last confidence. |
 
 Configuration persistence: everything except the subscription key is stored in
 MAUI `Preferences`; the key goes to `SecureStorage` and is never written to the
@@ -707,9 +721,11 @@ az bicep build --file infra/main.bicep --stdout
 - **Face API regional/access availability**: Face API `Identify` and Person
   Directory features require Microsoft's Limited Access approval in some
   subscriptions/regions — apply before relying on this in production.
-- **Face Lab writes to the real Face API.** The desktop test bench enrolls
-  people into the configured Dynamic Person Group exactly like the pipeline
-  does, so point it at a non-production Face resource (or turn off
-  auto-enroll) unless you intend to mutate the directory. Its local SQLite
-  database is scratch data — it uses `EnsureCreated` rather than migrations
-  and can be reset from the app.
+- **Face Lab writes to the real Face API.** The desktop test bench creates
+  provisional Person Directory entries, adds qualifying face templates,
+  promotes confirmed people into the configured Dynamic Person Group, and
+  deletes expired provisional entries. Point it at a non-production Face
+  resource (or turn off automated provisional enrollment) unless you intend to
+  mutate the directory. Existing local SQLite files are upgraded
+  idempotently; the database remains scratch data and can be reset from the
+  app.

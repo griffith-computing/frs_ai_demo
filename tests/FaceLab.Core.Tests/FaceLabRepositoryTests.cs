@@ -148,6 +148,79 @@ public sealed class FaceLabRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Managed_identity_evidence_is_distinct_and_can_be_promoted()
+    {
+        var firstImage = await _repository.SaveImageAsync("a.jpg", "image/jpeg", new byte[] { 1 }, CancellationToken.None);
+        var secondImage = await _repository.SaveImageAsync("b.jpg", "image/jpeg", new byte[] { 2 }, CancellationToken.None);
+        await _repository.CreateProvisionalIdentityAsync(
+            new ManagedIdentityRecord
+            {
+                PersonId = "managed-1",
+                DynamicPersonGroupId = "group",
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+            },
+            new EnrollmentEvidenceRecord
+            {
+                ImageId = firstImage.Id,
+                ImageSha256 = firstImage.Sha256
+            },
+            CancellationToken.None);
+
+        var duplicate = await _repository.TryAddEnrollmentEvidenceAsync(
+            "managed-1",
+            new EnrollmentEvidenceRecord { ImageId = firstImage.Id, ImageSha256 = firstImage.Sha256 },
+            DateTimeOffset.UtcNow,
+            0.9,
+            CancellationToken.None);
+        var added = await _repository.TryAddEnrollmentEvidenceAsync(
+            "managed-1",
+            new EnrollmentEvidenceRecord { ImageId = secondImage.Id, ImageSha256 = secondImage.Sha256 },
+            DateTimeOffset.UtcNow,
+            0.9,
+            CancellationToken.None);
+        await _repository.PromoteManagedIdentityAsync("managed-1", CancellationToken.None);
+
+        Assert.False(duplicate);
+        Assert.True(added);
+        var identity = await _repository.GetManagedIdentityAsync("managed-1", CancellationToken.None);
+        Assert.Equal(ManagedIdentityStates.Active, identity!.State);
+        Assert.Equal(2, identity.EvidenceCount);
+        Assert.Null(identity.ExpiresUtc);
+    }
+
+    [Fact]
+    public async Task Provisional_queries_separate_unexpired_and_expired_identities()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var image = await _repository.SaveImageAsync("a.jpg", "image/jpeg", new byte[] { 1 }, CancellationToken.None);
+        foreach (var (personId, expiry) in new[]
+                 {
+                     ("current", now.AddDays(1)),
+                     ("expired", now.AddDays(-1))
+                 })
+        {
+            await _repository.CreateProvisionalIdentityAsync(
+                new ManagedIdentityRecord
+                {
+                    PersonId = personId,
+                    DynamicPersonGroupId = "group",
+                    ExpiresUtc = expiry
+                },
+                new EnrollmentEvidenceRecord
+                {
+                    ImageId = image.Id,
+                    ImageSha256 = image.Sha256
+                },
+                CancellationToken.None);
+        }
+
+        Assert.Equal("current", Assert.Single(
+            await _repository.GetUnexpiredProvisionalIdentitiesAsync(now, CancellationToken.None)).PersonId);
+        Assert.Equal("expired", Assert.Single(
+            await _repository.GetExpiredProvisionalIdentitiesAsync(now, CancellationToken.None)).PersonId);
+    }
+
+    [Fact]
     public async Task SaveProfileAsync_inserts_then_updates_by_name()
     {
         await _repository.SaveProfileAsync("prod-like", """{"ConfidenceThreshold":0.6}""", CancellationToken.None);
@@ -181,6 +254,7 @@ public sealed class FaceLabRepositoryTests : IDisposable
         Assert.Empty(await _repository.GetImagesAsync(10, CancellationToken.None));
         Assert.Empty(await _repository.GetRunsAsync(10, CancellationToken.None));
         Assert.Empty(await _repository.GetPeopleAsync(CancellationToken.None));
+        Assert.Empty(await _repository.GetManagedIdentitiesAsync(CancellationToken.None));
     }
 
     [Fact]

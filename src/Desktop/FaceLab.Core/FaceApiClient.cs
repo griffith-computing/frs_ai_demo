@@ -29,10 +29,12 @@ public interface IFaceApiClient
 
     Task<IReadOnlyList<DetectedFace>> DetectFacesAsync(byte[] photo, CancellationToken cancellationToken);
     Task<IReadOnlyList<IdentifyResult>> IdentifyAsync(IEnumerable<string> faceIds, CancellationToken cancellationToken);
+    Task<VerifyResult> VerifyPersonAsync(string faceId, string personId, CancellationToken cancellationToken);
     Task EnsureDynamicPersonGroupExistsAsync(CancellationToken cancellationToken);
     Task<string> CreatePersonAsync(string name, CancellationToken cancellationToken);
     Task AddPersonFaceAsync(string personId, byte[] photo, FaceRectangle targetFace, CancellationToken cancellationToken);
     Task AddPersonToDynamicGroupAsync(string personId, CancellationToken cancellationToken);
+    Task DeletePersonAsync(string personId, CancellationToken cancellationToken);
 }
 
 public interface IFaceApiClientFactory
@@ -108,7 +110,7 @@ public sealed class FaceApiClient : IFaceApiClient
                 dynamicPersonGroupId = Options.DynamicPersonGroupId,
                 faceIds = batch,
                 maxNumOfCandidatesReturned = Options.MaxCandidatesReturned,
-                confidenceThreshold = Options.ConfidenceThreshold
+                confidenceThreshold = 0
             };
 
             var body = await SendJsonAsync(
@@ -126,6 +128,22 @@ public sealed class FaceApiClient : IFaceApiClient
         }
 
         return results;
+    }
+
+    public async Task<VerifyResult> VerifyPersonAsync(
+        string faceId,
+        string personId,
+        CancellationToken cancellationToken)
+    {
+        var body = await SendJsonAsync(
+            HttpMethod.Post,
+            $"{Options.ApiVersionSegment}/verify",
+            "verify face against person",
+            new { faceId, personId },
+            cancellationToken);
+
+        return Deserialize<VerifyResult>(body)
+            ?? throw new FaceApiException("Face API did not return a verification result.");
     }
 
     public async Task EnsureDynamicPersonGroupExistsAsync(CancellationToken cancellationToken)
@@ -195,6 +213,35 @@ public sealed class FaceApiClient : IFaceApiClient
             cancellationToken);
 
         await WaitForOperationAsync(operationLocation, "add person to dynamic person group", cancellationToken);
+    }
+
+    public async Task DeletePersonAsync(string personId, CancellationToken cancellationToken)
+    {
+        var (trace, operationLocation, _) = await SendRawAsync(
+            HttpMethod.Delete,
+            $"{Options.ApiVersionSegment}/persons/{personId}",
+            "delete person",
+            null,
+            null,
+            cancellationToken,
+            throwOnFailure: false);
+
+        if (trace.StatusCode == (int)HttpStatusCode.NotFound)
+        {
+            return;
+        }
+
+        if (!trace.IsSuccess)
+        {
+            throw FailureException("delete person", trace);
+        }
+
+        if (string.IsNullOrWhiteSpace(operationLocation))
+        {
+            return;
+        }
+
+        await WaitForOperationAsync(operationLocation, "delete person", cancellationToken);
     }
 
     private async Task WaitForOperationAsync(string? operationLocation, string operationDescription, CancellationToken cancellationToken)

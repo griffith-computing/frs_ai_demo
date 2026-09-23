@@ -39,6 +39,10 @@ public sealed class FaceLabDbContext : DbContext
 
     public DbSet<PersonRecord> People => Set<PersonRecord>();
 
+    public DbSet<ManagedIdentityRecord> ManagedIdentities => Set<ManagedIdentityRecord>();
+
+    public DbSet<EnrollmentEvidenceRecord> EnrollmentEvidence => Set<EnrollmentEvidenceRecord>();
+
     public DbSet<ConfigProfile> ConfigProfiles => Set<ConfigProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -66,6 +70,21 @@ public sealed class FaceLabDbContext : DbContext
         });
 
         modelBuilder.Entity<PersonRecord>(entity => entity.HasKey(p => p.PersonId));
+
+        modelBuilder.Entity<ManagedIdentityRecord>(entity =>
+        {
+            entity.HasKey(p => p.PersonId);
+            entity.HasIndex(p => new { p.State, p.ExpiresUtc });
+            entity.HasMany(p => p.Evidence)
+                .WithOne(e => e.ManagedIdentity!)
+                .HasForeignKey(e => e.PersonId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EnrollmentEvidenceRecord>(entity =>
+        {
+            entity.HasIndex(e => new { e.PersonId, e.ImageSha256 }).IsUnique();
+        });
 
         modelBuilder.Entity<ConfigProfile>(entity => entity.HasIndex(p => p.Name).IsUnique());
 

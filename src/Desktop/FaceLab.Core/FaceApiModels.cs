@@ -198,6 +198,15 @@ public sealed class IdentifyCandidate
     public double Confidence { get; init; }
 }
 
+public sealed class VerifyResult
+{
+    [JsonPropertyName("isIdentical")]
+    public bool IsIdentical { get; init; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; init; }
+}
+
 public sealed class FaceOperationResult
 {
     [JsonPropertyName("status")]
