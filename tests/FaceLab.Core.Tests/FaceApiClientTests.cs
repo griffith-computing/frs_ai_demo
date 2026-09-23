@@ -99,6 +99,20 @@ public sealed class FaceApiClientTests
     }
 
     [Fact]
+    public async Task DetectFacesAsync_deserializes_complete_response_when_trace_is_truncated()
+    {
+        var response = "[" + string.Join(",", Enumerable.Range(1, 20).Select(index =>
+            $$"""{"faceId":"face-{{index}}","faceRectangle":{"top":10,"left":20,"width":30,"height":40},"padding":"{{new string('x', 500)}}"}""")) + "]";
+        var handler = new StubHttpMessageHandler().Enqueue(HttpStatusCode.OK, response);
+        var client = new FaceApiClient(new HttpClient(handler), TestOptions.Create());
+
+        var faces = await client.DetectFacesAsync(new byte[] { 1 }, CancellationToken.None);
+
+        Assert.Equal(20, faces.Count);
+        Assert.Contains("truncated", client.Traces.Single().ResponseBody);
+    }
+
+    [Fact]
     public async Task DetectFacesAsync_sends_the_subscription_key_header_in_key_mode()
     {
         var handler = new StubHttpMessageHandler().Enqueue(HttpStatusCode.OK, DetectResponse);

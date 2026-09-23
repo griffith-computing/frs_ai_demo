@@ -3,7 +3,9 @@
     x:Class="FaceLab.Maui.Views.RunDetailPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:FaceLab.Maui.Controls"
     xmlns:data="clr-namespace:FaceLab.Core.Data;assembly=FaceLab.Core"
+    xmlns:overlay="clr-namespace:FaceLab.Maui.ViewModels"
     xmlns:vm="clr-namespace:FaceLab.Maui.ViewModels"
     x:DataType="vm:RunDetailViewModel"
     Title="Run detail">
@@ -19,20 +21,33 @@
                 <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" VerticalOptions="Center" />
             </HorizontalStackLayout>
 
-            <Image Aspect="AspectFit" HeightRequest="260" HorizontalOptions="Start" Source="{Binding Preview}" />
+            <controls:FaceOverlayView
+                Faces="{Binding FaceOverlays}"
+                HeightRequest="260"
+                HorizontalOptions="Start"
+                ImageBytes="{Binding Run.Image.Bytes}" />
 
             <Label FontSize="16" FontAttributes="Bold" Text="Faces" />
-            <CollectionView ItemsSource="{Binding Faces}" SelectionMode="None">
+            <CollectionView ItemsSource="{Binding FaceOverlays}" SelectionMode="None">
                 <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="data:FaceResultRecord">
+                    <DataTemplate x:DataType="overlay:FaceOverlayItem">
                         <Border Margin="0,4" Padding="10" Stroke="LightGray" StrokeThickness="1">
                             <VerticalStackLayout Spacing="2">
-                                <Label FontAttributes="Bold" Text="{Binding Outcome}" />
-                                <Label FontFamily="Consolas" FontSize="12" Text="{Binding FaceId, StringFormat='faceId: {0}'}" />
-                                <Label FontSize="12" Text="{Binding MatchedPersonId, StringFormat='Matched person: {0}'}" />
-                                <Label FontSize="12" Text="{Binding EnrolledPersonId, StringFormat='Enrolled person: {0}'}" />
-                                <Label FontSize="12" Text="{Binding Confidence, StringFormat='Confidence: {0:F3}'}" />
-                                <Label FontSize="12" Text="{Binding ErrorMessage}" TextColor="Firebrick" />
+                                <Label FontAttributes="Bold" Text="{Binding Record.Outcome}" />
+                                <Label FontFamily="Consolas" FontSize="12" Text="{Binding Record.FaceId, StringFormat='faceId: {0}'}" />
+                                <Label FontSize="12" Text="{Binding PersonLabel}" />
+                                <Label FontSize="12" Text="{Binding Record.Confidence, StringFormat='Confidence: {0:F3}'}" />
+                                <Label FontSize="12" Text="{Binding Record.ErrorMessage}" TextColor="Firebrick" />
+                                <HorizontalStackLayout Spacing="16">
+                                    <HorizontalStackLayout Spacing="6">
+                                        <CheckBox IsChecked="{Binding ShowRectangle}" />
+                                        <Label Text="Face rectangle" VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+                                    <HorizontalStackLayout Spacing="6">
+                                        <CheckBox IsChecked="{Binding ShowLandmarks}" IsEnabled="{Binding HasLandmarks}" />
+                                        <Label Text="Face landmarks" VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+                                </HorizontalStackLayout>
                                 <Button
                                     HorizontalOptions="Start"
                                     Command="{Binding Source={RelativeSource AncestorType={x:Type vm:RunDetailViewModel}}, Path=ShowDebugInfoCommand}"

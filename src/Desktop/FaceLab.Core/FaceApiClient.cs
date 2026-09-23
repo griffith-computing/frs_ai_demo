@@ -132,7 +132,7 @@ public sealed class FaceApiClient : IFaceApiClient
     {
         var url = $"{Options.ApiVersionSegment}/dynamicpersongroups/{Options.DynamicPersonGroupId}";
 
-        var (response, _) = await SendRawAsync(HttpMethod.Get, url, "get dynamic person group", null, null, cancellationToken);
+        var (response, _, _) = await SendRawAsync(HttpMethod.Get, url, "get dynamic person group", null, null, cancellationToken);
         if (response.IsSuccess)
         {
             return;
@@ -153,14 +153,14 @@ public sealed class FaceApiClient : IFaceApiClient
 
     public async Task<string> CreatePersonAsync(string name, CancellationToken cancellationToken)
     {
-        var (trace, operationLocation) = await SendTracedJsonAsync(
+        var (trace, operationLocation, responseBody) = await SendTracedJsonAsync(
             HttpMethod.Post,
             $"{Options.ApiVersionSegment}/persons",
             "create person",
             new { name },
             cancellationToken);
 
-        var personId = Deserialize<CreatePersonResponse>(trace.ResponseBody)?.PersonId
+        var personId = Deserialize<CreatePersonResponse>(responseBody)?.PersonId
             ?? throw new FaceApiException("Face API did not return a personId when creating a new person.");
 
         await WaitForOperationAsync(operationLocation, "create person", cancellationToken);
@@ -173,7 +173,7 @@ public sealed class FaceApiClient : IFaceApiClient
         var url = $"{Options.ApiVersionSegment}/persons/{personId}/recognitionModels/{Options.RecognitionModel}/persistedfaces" +
                   $"?targetFace={targetFaceValue}&detectionModel={Options.DetectionModel}";
 
-        var (_, operationLocation) = await SendRawAsync(
+        var (_, operationLocation, _) = await SendRawAsync(
             HttpMethod.Post,
             url,
             "add person face",
@@ -187,7 +187,7 @@ public sealed class FaceApiClient : IFaceApiClient
 
     public async Task AddPersonToDynamicGroupAsync(string personId, CancellationToken cancellationToken)
     {
-        var (_, operationLocation) = await SendTracedJsonAsync(
+        var (_, operationLocation, _) = await SendTracedJsonAsync(
             HttpMethod.Patch,
             $"{Options.ApiVersionSegment}/dynamicpersongroups/{Options.DynamicPersonGroupId}",
             "add person to dynamic person group",
@@ -252,7 +252,7 @@ public sealed class FaceApiClient : IFaceApiClient
             cancellationToken);
     }
 
-    private async Task<(CallTrace Trace, string? OperationLocation)> SendTracedJsonAsync(
+    private async Task<(CallTrace Trace, string? OperationLocation, string ResponseBody)> SendTracedJsonAsync(
         HttpMethod method,
         string url,
         string operationDescription,
@@ -278,11 +278,18 @@ public sealed class FaceApiClient : IFaceApiClient
         string? requestSummary,
         CancellationToken cancellationToken)
     {
-        var (trace, _) = await SendRawAsync(method, url, operationDescription, contentFactory, requestSummary, cancellationToken, throwOnFailure: true);
-        return trace.ResponseBody;
+        var (_, _, responseBody) = await SendRawAsync(
+            method,
+            url,
+            operationDescription,
+            contentFactory,
+            requestSummary,
+            cancellationToken,
+            throwOnFailure: true);
+        return responseBody;
     }
 
-    private async Task<(CallTrace Trace, string? OperationLocation)> SendRawAsync(
+    private async Task<(CallTrace Trace, string? OperationLocation, string ResponseBody)> SendRawAsync(
         HttpMethod method,
         string url,
         string operationDescription,
@@ -320,7 +327,8 @@ public sealed class FaceApiClient : IFaceApiClient
 
             trace.ElapsedMilliseconds = stopwatch.ElapsedMilliseconds;
             trace.StatusCode = (int)response.StatusCode;
-            trace.ResponseBody = CallTrace.Truncate(await response.Content.ReadAsStringAsync(cancellationToken));
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            trace.ResponseBody = CallTrace.Truncate(responseBody);
 
             var operationLocation = response.Headers.TryGetValues("Operation-Location", out var values)
                 ? values.FirstOrDefault()
@@ -331,7 +339,7 @@ public sealed class FaceApiClient : IFaceApiClient
                 throw FailureException(operationDescription, trace);
             }
 
-            return (trace, operationLocation);
+            return (trace, operationLocation, responseBody);
         }
         catch (Exception ex) when (ex is not FaceApiException)
         {
