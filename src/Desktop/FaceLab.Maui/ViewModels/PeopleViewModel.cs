@@ -35,6 +35,8 @@ public sealed partial class PeopleViewModel : ObservableObject
 
     public ObservableCollection<PersonRecord> People { get; } = new();
 
+    public ObservableCollection<ManagedIdentityRecord> ProvisionalIdentities { get; } = new();
+
     [RelayCommand]
     public async Task LoadAsync()
     {
@@ -45,8 +47,15 @@ public sealed partial class PeopleViewModel : ObservableObject
             People.Add(person);
         }
 
-        StatusMessage = People.Count == 0
-            ? "No people seen yet. Faces enrolled or matched during a run appear here."
-            : $"{People.Count} person record(s) tracked locally.";
+        var managed = await _repository.GetManagedIdentitiesAsync(CancellationToken.None);
+        ProvisionalIdentities.Clear();
+        foreach (var identity in managed.Where(identity => identity.State == ManagedIdentityStates.Provisional))
+        {
+            ProvisionalIdentities.Add(identity);
+        }
+
+        StatusMessage = People.Count == 0 && ProvisionalIdentities.Count == 0
+            ? "No active or provisional identities tracked locally."
+            : $"{People.Count} active person record(s), {ProvisionalIdentities.Count} provisional identity record(s).";
     }
 }

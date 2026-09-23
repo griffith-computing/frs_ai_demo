@@ -152,7 +152,7 @@ public sealed class FaceApiClientTests
     }
 
     [Fact]
-    public async Task IdentifyAsync_sends_the_configured_threshold_group_and_candidate_count()
+    public async Task IdentifyAsync_requests_unfiltered_candidates_for_local_safety_policy()
     {
         var handler = new StubHttpMessageHandler()
             .Enqueue(HttpStatusCode.OK, """[{"faceId":"face-1","candidates":[{"personId":"person-1","confidence":0.92}]}]""");
@@ -170,9 +170,27 @@ public sealed class FaceApiClientTests
         Assert.Equal("person-1", result.Candidates[0].PersonId);
 
         var payload = JsonDocument.Parse(Assert.Single(handler.Requests).Body!).RootElement;
-        Assert.Equal(0.85, payload.GetProperty("confidenceThreshold").GetDouble());
+        Assert.Equal(0, payload.GetProperty("confidenceThreshold").GetDouble());
         Assert.Equal(3, payload.GetProperty("maxNumOfCandidatesReturned").GetInt32());
         Assert.Equal("custom-group", payload.GetProperty("dynamicPersonGroupId").GetString());
+    }
+
+    [Fact]
+    public async Task VerifyPersonAsync_sends_face_and_person_ids_and_parses_confidence()
+    {
+        var handler = new StubHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, """{"isIdentical":true,"confidence":0.87}""");
+        var client = new FaceApiClient(new HttpClient(handler), TestOptions.Create());
+
+        var result = await client.VerifyPersonAsync("face-1", "person-7", CancellationToken.None);
+
+        Assert.True(result.IsIdentical);
+        Assert.Equal(0.87, result.Confidence);
+        var request = Assert.Single(handler.Requests);
+        Assert.EndsWith("/verify", request.Uri.AbsolutePath);
+        var payload = JsonDocument.Parse(request.Body!).RootElement;
+        Assert.Equal("face-1", payload.GetProperty("faceId").GetString());
+        Assert.Equal("person-7", payload.GetProperty("personId").GetString());
     }
 
     [Fact]
@@ -311,6 +329,33 @@ public sealed class FaceApiClientTests
         var uri = handler.Requests[0].Uri.ToString();
         Assert.Contains("persons/person-9/recognitionModels/recognition_04/persistedfaces", uri);
         Assert.Contains("targetFace=1,2,3,4", Uri.UnescapeDataString(uri));
+    }
+
+    [Fact]
+    public async Task DeletePersonAsync_deletes_and_waits_for_the_operation()
+    {
+        var handler = new StubHttpMessageHandler()
+            .Enqueue(HttpStatusCode.Accepted, "{}", "https://face.example.com/operations/delete-1")
+            .Enqueue(HttpStatusCode.OK, """{"status":"succeeded"}""");
+        var client = new FaceApiClient(new HttpClient(handler), TestOptions.Create());
+
+        await client.DeletePersonAsync("person-9", CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Delete, handler.Requests[0].Method);
+        Assert.EndsWith("/persons/person-9", handler.Requests[0].Uri.AbsolutePath);
+        Assert.Equal(HttpMethod.Get, handler.Requests[1].Method);
+    }
+
+    [Fact]
+    public async Task DeletePersonAsync_treats_an_already_missing_person_as_deleted()
+    {
+        var handler = new StubHttpMessageHandler()
+            .Enqueue(HttpStatusCode.NotFound, """{"error":{"code":"PersonNotFound"}}""");
+        var client = new FaceApiClient(new HttpClient(handler), TestOptions.Create());
+
+        await client.DeletePersonAsync("missing-person", CancellationToken.None);
+
+        Assert.Single(handler.Requests);
     }
 
     [Fact]

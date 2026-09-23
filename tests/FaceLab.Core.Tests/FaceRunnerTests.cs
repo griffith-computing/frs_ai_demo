@@ -13,6 +13,8 @@
 //----------------------------------------------------------------------------------
 
 using FaceLab.Core.Data;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace FaceLab.Core.Tests;
 
@@ -39,6 +41,12 @@ public sealed class FakeFaceApiClient : IFaceApiClient, IFaceApiClientFactory
     public List<string> CreatedPersonIds { get; } = new();
 
     public List<string> PersonsAddedToGroup { get; } = new();
+
+    public List<string> FacesAddedToPeople { get; } = new();
+
+    public Dictionary<string, VerifyResult> VerificationResults { get; } = new();
+
+    public List<string> DeletedPersonIds { get; } = new();
 
     public Exception? EnsureGroupException { get; set; }
 
@@ -69,6 +77,14 @@ public sealed class FakeFaceApiClient : IFaceApiClient, IFaceApiClientFactory
         return Task.FromResult<IReadOnlyList<IdentifyResult>>(IdentifyResults);
     }
 
+    public Task<VerifyResult> VerifyPersonAsync(string faceId, string personId, CancellationToken cancellationToken)
+    {
+        Trace("verify face against person");
+        return Task.FromResult(
+            VerificationResults.GetValueOrDefault(personId) ??
+            new VerifyResult { IsIdentical = false, Confidence = 0 });
+    }
+
     public Task EnsureDynamicPersonGroupExistsAsync(CancellationToken cancellationToken)
     {
         Trace("get dynamic person group");
@@ -97,6 +113,7 @@ public sealed class FakeFaceApiClient : IFaceApiClient, IFaceApiClientFactory
     public Task AddPersonFaceAsync(string personId, byte[] photo, FaceRectangle targetFace, CancellationToken cancellationToken)
     {
         Trace("add person face");
+        FacesAddedToPeople.Add(personId);
         return Task.CompletedTask;
     }
 
@@ -104,6 +121,13 @@ public sealed class FakeFaceApiClient : IFaceApiClient, IFaceApiClientFactory
     {
         Trace("add person to dynamic person group");
         PersonsAddedToGroup.Add(personId);
+        return Task.CompletedTask;
+    }
+
+    public Task DeletePersonAsync(string personId, CancellationToken cancellationToken)
+    {
+        Trace("delete person");
+        DeletedPersonIds.Add(personId);
         return Task.CompletedTask;
     }
 
@@ -133,15 +157,31 @@ public sealed class FaceRunnerTests : IDisposable
     private static DetectedFace Face(string faceId) => new()
     {
         FaceId = faceId,
-        FaceRectangle = new FaceRectangle { Top = 1, Left = 2, Width = 3, Height = 4 }
+        FaceRectangle = new FaceRectangle { Top = 20, Left = 20, Width = 120, Height = 120 },
+        FaceAttributes = new FaceAttributes
+        {
+            QualityForRecognition = "high",
+            Mask = new FaceMask { NoseAndMouthCovered = false },
+            HeadPose = new HeadPose()
+        }
     };
 
-    private async Task<ImageRecord> ImportAsync(int byteCount = 4) =>
+    private async Task<ImageRecord> ImportAsync(int? byteCount = null, byte marker = 0) =>
         await _repository.SaveImageAsync(
             "face.jpg",
             "image/jpeg",
-            Enumerable.Range(1, byteCount).Select(i => (byte)i).ToArray(),
+            byteCount is null
+                ? CreateImageBytes(marker)
+                : Enumerable.Range(1, byteCount.Value).Select(i => (byte)i).ToArray(),
             CancellationToken.None);
+
+    private static byte[] CreateImageBytes(byte marker)
+    {
+        using var image = new Image<Rgba32>(300, 300, new Rgba32(marker, marker, marker));
+        using var stream = new MemoryStream();
+        image.SaveAsJpeg(stream);
+        return stream.ToArray();
+    }
 
     [Fact]
     public async Task RunAsync_records_a_match_without_enrolling()
@@ -171,7 +211,7 @@ public sealed class FaceRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_enrolls_an_unmatched_face_when_auto_enroll_is_on()
+    public async Task RunAsync_creates_a_provisional_identity_when_auto_enroll_is_on()
     {
         var options = TestOptions.Create(o => o.AutoEnrollUnmatchedFaces = true);
         var client = new FakeFaceApiClient(options);
@@ -180,9 +220,9 @@ public sealed class FaceRunnerTests : IDisposable
         var run = await new FaceRunner(client, _repository).RunAsync(await ImportAsync(), options, CancellationToken.None);
 
         var face = Assert.Single(run.Faces);
-        Assert.Equal(FaceOutcomes.Enrolled, face.Outcome);
-        Assert.Equal(Assert.Single(client.CreatedPersonIds), face.EnrolledPersonId);
-        Assert.Equal(face.EnrolledPersonId, Assert.Single(client.PersonsAddedToGroup));
+        Assert.Equal(FaceOutcomes.ProvisionalCreated, face.Outcome);
+        Assert.Equal(Assert.Single(client.CreatedPersonIds), face.ProvisionalPersonId);
+        Assert.Empty(client.PersonsAddedToGroup);
         Assert.True(client.GroupEnsured);
     }
 
@@ -241,6 +281,172 @@ public sealed class FaceRunnerTests : IDisposable
         var face = Assert.Single(run.Faces);
         Assert.Equal(FaceOutcomes.Failed, face.Outcome);
         Assert.Contains("quota", face.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task RunAsync_defers_a_face_that_fails_the_quality_gate()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        client.DetectedFaces.Add(new DetectedFace
+        {
+            FaceId = "face-1",
+            FaceRectangle = new FaceRectangle { Left = 20, Top = 20, Width = 120, Height = 120 },
+            FaceAttributes = new FaceAttributes
+            {
+                QualityForRecognition = "medium",
+                Mask = new FaceMask { NoseAndMouthCovered = false },
+                HeadPose = new HeadPose()
+            }
+        });
+
+        var run = await new FaceRunner(client, _repository).RunAsync(
+            await ImportAsync(),
+            options,
+            CancellationToken.None);
+
+        var face = Assert.Single(run.Faces);
+        Assert.Equal(FaceOutcomes.Deferred, face.Outcome);
+        Assert.Contains("quality", face.DecisionReason);
+        Assert.Empty(client.CreatedPersonIds);
+    }
+
+    [Fact]
+    public async Task RunAsync_promotes_a_provisional_after_a_second_distinct_qualifying_image()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        client.DetectedFaces.Add(Face("face-1"));
+        var runner = new FaceRunner(client, _repository);
+
+        var firstRun = await runner.RunAsync(await ImportAsync(marker: 1), options, CancellationToken.None);
+        var personId = Assert.Single(client.CreatedPersonIds);
+        Assert.Equal(FaceOutcomes.ProvisionalCreated, Assert.Single(firstRun.Faces).Outcome);
+
+        client.VerificationResults[personId] = new VerifyResult { IsIdentical = true, Confidence = 0.88 };
+        var secondRun = await runner.RunAsync(await ImportAsync(marker: 2), options, CancellationToken.None);
+
+        var face = Assert.Single(secondRun.Faces);
+        Assert.Equal(FaceOutcomes.Promoted, face.Outcome);
+        Assert.Equal(personId, face.EnrolledPersonId);
+        Assert.Equal(personId, Assert.Single(client.PersonsAddedToGroup));
+        var managed = await _repository.GetManagedIdentityAsync(personId, CancellationToken.None);
+        Assert.Equal(ManagedIdentityStates.Active, managed!.State);
+        Assert.Equal(2, managed.EvidenceCount);
+        Assert.Equal(personId, Assert.Single(await _repository.GetPeopleAsync(CancellationToken.None)).PersonId);
+    }
+
+    [Fact]
+    public async Task RunAsync_does_not_count_the_same_image_twice_for_promotion()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        client.DetectedFaces.Add(Face("face-1"));
+        var runner = new FaceRunner(client, _repository);
+        var image = await ImportAsync(marker: 3);
+
+        await runner.RunAsync(image, options, CancellationToken.None);
+        var personId = Assert.Single(client.CreatedPersonIds);
+        client.VerificationResults[personId] = new VerifyResult { IsIdentical = true, Confidence = 0.9 };
+
+        var repeat = await runner.RunAsync(image, options, CancellationToken.None);
+
+        Assert.Equal(FaceOutcomes.ProvisionalConfirmed, Assert.Single(repeat.Faces).Outcome);
+        Assert.Empty(client.PersonsAddedToGroup);
+        Assert.Equal(1, (await _repository.GetManagedIdentityAsync(personId, CancellationToken.None))!.EvidenceCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_rejects_ambiguous_active_candidates()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        client.DetectedFaces.Add(Face("face-1"));
+        client.IdentifyResults.Add(new IdentifyResult
+        {
+            FaceId = "face-1",
+            Candidates =
+            {
+                new IdentifyCandidate { PersonId = "person-1", Confidence = 0.91 },
+                new IdentifyCandidate { PersonId = "person-2", Confidence = 0.86 }
+            }
+        });
+
+        var run = await new FaceRunner(client, _repository).RunAsync(
+            await ImportAsync(),
+            options,
+            CancellationToken.None);
+
+        var face = Assert.Single(run.Faces);
+        Assert.Equal(FaceOutcomes.Ambiguous, face.Outcome);
+        Assert.Empty(await _repository.GetPeopleAsync(CancellationToken.None));
+        Assert.Empty(client.CreatedPersonIds);
+    }
+
+    [Fact]
+    public async Task RunAsync_deletes_expired_provisional_people_before_processing()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        await _repository.CreateProvisionalIdentityAsync(
+            new ManagedIdentityRecord
+            {
+                PersonId = "expired-person",
+                DynamicPersonGroupId = options.DynamicPersonGroupId,
+                CreatedUtc = DateTimeOffset.UtcNow.AddDays(-31),
+                LastSeenUtc = DateTimeOffset.UtcNow.AddDays(-31),
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(-1)
+            },
+            new EnrollmentEvidenceRecord
+            {
+                ImageId = (await ImportAsync(marker: 4)).Id,
+                ImageSha256 = (await ImportAsync(marker: 4)).Sha256
+            },
+            CancellationToken.None);
+
+        await new FaceRunner(client, _repository).RunAsync(
+            await ImportAsync(marker: 5),
+            options,
+            CancellationToken.None);
+
+        Assert.Equal("expired-person", Assert.Single(client.DeletedPersonIds));
+        Assert.Null(await _repository.GetManagedIdentityAsync("expired-person", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RunAsync_learns_only_from_a_high_confidence_match_for_a_managed_active_identity()
+    {
+        var options = TestOptions.Create();
+        var client = new FakeFaceApiClient(options);
+        var firstImage = await ImportAsync(marker: 6);
+        await _repository.CreateProvisionalIdentityAsync(
+            new ManagedIdentityRecord
+            {
+                PersonId = "managed-person",
+                DynamicPersonGroupId = options.DynamicPersonGroupId,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+            },
+            new EnrollmentEvidenceRecord
+            {
+                ImageId = firstImage.Id,
+                ImageSha256 = firstImage.Sha256
+            },
+            CancellationToken.None);
+        await _repository.PromoteManagedIdentityAsync("managed-person", CancellationToken.None);
+        client.DetectedFaces.Add(Face("face-1"));
+        client.IdentifyResults.Add(new IdentifyResult
+        {
+            FaceId = "face-1",
+            Candidates = { new IdentifyCandidate { PersonId = "managed-person", Confidence = 0.95 } }
+        });
+
+        await new FaceRunner(client, _repository).RunAsync(
+            await ImportAsync(marker: 7),
+            options,
+            CancellationToken.None);
+
+        Assert.Equal("managed-person", Assert.Single(client.FacesAddedToPeople));
+        Assert.Equal(2, (await _repository.GetManagedIdentityAsync("managed-person", CancellationToken.None))!.EvidenceCount);
     }
 
     [Fact]
@@ -306,11 +512,13 @@ public sealed class FaceRunnerTests : IDisposable
         client.DetectedFaces.Add(new DetectedFace
         {
             FaceId = "face-1",
-            FaceRectangle = new FaceRectangle { Top = 1, Left = 2, Width = 3, Height = 4 },
+            FaceRectangle = new FaceRectangle { Top = 20, Left = 20, Width = 120, Height = 120 },
             RecognitionModel = "recognition_04",
             FaceAttributes = new FaceAttributes
             {
-                HeadPose = new HeadPose { Pitch = 1, Roll = 2, Yaw = 3 }
+                HeadPose = new HeadPose { Pitch = 1, Roll = 2, Yaw = 3 },
+                Mask = new FaceMask { NoseAndMouthCovered = false },
+                QualityForRecognition = "high"
             }
         });
 

@@ -83,6 +83,11 @@ public static class FaceOutcomes
 {
     public const string Matched = "Matched";
     public const string Enrolled = "Enrolled";
+    public const string ProvisionalCreated = "ProvisionalCreated";
+    public const string ProvisionalConfirmed = "ProvisionalConfirmed";
+    public const string Promoted = "Promoted";
+    public const string Deferred = "Deferred";
+    public const string Ambiguous = "Ambiguous";
     public const string NoMatch = "NoMatch";
     public const string Failed = "Failed";
 }
@@ -116,6 +121,11 @@ public sealed class FaceResultRecord
 
     [MaxLength(100)]
     public string? EnrolledPersonId { get; set; }
+
+    [MaxLength(100)]
+    public string? ProvisionalPersonId { get; set; }
+
+    public string? DecisionReason { get; set; }
 
     public string? ErrorMessage { get; set; }
 
@@ -188,6 +198,60 @@ public sealed class PersonRecord
     public int SightingCount { get; set; }
 
     public double LastConfidence { get; set; }
+}
+
+public static class ManagedIdentityStates
+{
+    public const string Provisional = "Provisional";
+    public const string Active = "Active";
+}
+
+/// <summary>
+/// A Person Directory entry whose enrollment lifecycle is controlled by this app. Provisional
+/// entries stay outside the dynamic group until enough distinct evidence has been recorded.
+/// </summary>
+public sealed class ManagedIdentityRecord
+{
+    [MaxLength(100)]
+    public string PersonId { get; set; } = string.Empty;
+
+    [MaxLength(100)]
+    public string DynamicPersonGroupId { get; set; } = string.Empty;
+
+    [MaxLength(32)]
+    public string State { get; set; } = ManagedIdentityStates.Provisional;
+
+    public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset? ExpiresUtc { get; set; }
+
+    public int EvidenceCount { get; set; }
+
+    public double LastConfidence { get; set; }
+
+    public List<EnrollmentEvidenceRecord> Evidence { get; set; } = new();
+}
+
+/// <summary>A distinct source image accepted as enrollment evidence for an app-managed identity.</summary>
+public sealed class EnrollmentEvidenceRecord
+{
+    public int Id { get; set; }
+
+    [MaxLength(100)]
+    public string PersonId { get; set; } = string.Empty;
+
+    public ManagedIdentityRecord? ManagedIdentity { get; set; }
+
+    public int ImageId { get; set; }
+
+    [MaxLength(64)]
+    public string ImageSha256 { get; set; } = string.Empty;
+
+    public DateTimeOffset CapturedUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public double Confidence { get; set; }
 }
 
 /// <summary>A named, reusable Face API configuration. Never contains the subscription key.</summary>

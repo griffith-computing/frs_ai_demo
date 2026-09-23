@@ -37,6 +37,7 @@
                                 <Label FontFamily="Consolas" FontSize="12" Text="{Binding Record.FaceId, StringFormat='faceId: {0}'}" />
                                 <Label FontSize="12" Text="{Binding PersonLabel}" />
                                 <Label FontSize="12" Text="{Binding Record.Confidence, StringFormat='Confidence: {0:F3}'}" />
+                                <Label FontSize="12" Text="{Binding Record.DecisionReason}" TextColor="DarkGoldenrod" />
                                 <Label FontSize="12" Text="{Binding Record.ErrorMessage}" TextColor="Firebrick" />
                                 <HorizontalStackLayout Spacing="16">
                                     <HorizontalStackLayout Spacing="6">

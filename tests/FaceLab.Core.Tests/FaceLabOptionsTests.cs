@@ -26,7 +26,11 @@ public sealed class FaceLabOptionsTests
         Assert.Equal("recognition_04", options.RecognitionModel);
         Assert.Equal("frs-ai-demo-group", options.DynamicPersonGroupId);
         Assert.Equal(0.6, options.ConfidenceThreshold);
+        Assert.Equal(2, options.MaxCandidatesReturned);
         Assert.Equal(10, options.IdentifyBatchSize);
+        Assert.Equal(2, options.RequiredEnrollmentImages);
+        Assert.Equal(0.8, options.ProvisionalVerificationThreshold);
+        Assert.Equal(30, options.ProvisionalExpirationDays);
     }
 
     [Fact]
@@ -83,6 +87,25 @@ public sealed class FaceLabOptionsTests
         var errors = TestOptions.Create(o => o.IdentifyBatchSize = batchSize).Validate();
 
         Assert.Contains(errors, e => e.Contains("Identify batch size"));
+    }
+
+    [Fact]
+    public void Validate_rejects_an_unsafe_provisional_policy()
+    {
+        var errors = TestOptions.Create(options =>
+        {
+            options.MaxCandidatesReturned = 1;
+            options.RequiredEnrollmentImages = 1;
+            options.ProvisionalVerificationThreshold = 1.1;
+            options.TemplateLearningThreshold = 0.5;
+            options.ProvisionalExpirationDays = 0;
+        }).Validate();
+
+        Assert.Contains(errors, error => error.Contains("Max candidates"));
+        Assert.Contains(errors, error => error.Contains("Required enrollment images"));
+        Assert.Contains(errors, error => error.Contains("Provisional verification threshold"));
+        Assert.Contains(errors, error => error.Contains("Template learning threshold"));
+        Assert.Contains(errors, error => error.Contains("expiration"));
     }
 
     [Fact]

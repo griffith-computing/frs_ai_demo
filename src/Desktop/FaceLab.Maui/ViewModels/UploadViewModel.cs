@@ -223,5 +223,6 @@ public sealed partial class UploadViewModel : ObservableObject
         $"{(string.IsNullOrWhiteSpace(options.Endpoint) ? "(no endpoint set)" : options.Endpoint)} | " +
         $"{options.ApiVersionSegment} | {options.DetectionModel} / {options.RecognitionModel} | " +
         $"group {options.DynamicPersonGroupId} | threshold {options.ConfidenceThreshold:F2} | " +
-        $"auth {options.AuthMode} | auto-enroll {(options.AutoEnrollUnmatchedFaces ? "on" : "off")}";
+        $"auth {options.AuthMode} | provisional enrollment {(options.AutoEnrollUnmatchedFaces ? "on" : "off")} | " +
+        $"{options.RequiredEnrollmentImages} images | verify {options.ProvisionalVerificationThreshold:F2}";
 }
